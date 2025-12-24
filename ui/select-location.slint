@@ -1,0 +1,142 @@
+
+import { HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
+import { MullvadPalette } from "palette.slint";
+import { RelayList, Country } from "relay-list.slint";
+
+component SelectLocationSection inherits Rectangle {
+    in property text <=> txt.text;
+
+    background: MullvadPalette.light_blue;
+    height: 48px;
+
+    txt := Text {
+        text: "All locations";
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        x: 16px;
+    }
+}
+
+export component SelectLocation inherits Rectangle {
+    in property <[Country]> countries: [
+        { name: "Sweden", cities: [] },
+        { name: "Burma",  cities: [] },
+        { name: "Taiwan", cities: [] },
+    ];
+    callback on_close();
+
+    width: 320px;
+    height: 568px;
+    background: MullvadPalette.dark_blue;
+
+    VerticalBox {
+        padding: 0;
+        HorizontalBox {
+            alignment: space-between;
+
+            Image {
+                source: @image-url("./images/icon-chevron-down-circle.svg");
+                height: 24px;
+                opacity: input_close.has-hover ? 0.8 : 0.6;
+                input_close := TouchArea {
+                    clicked => {
+                        root.on_close();
+                    }
+                }
+            }
+
+            Text {
+                color: white;
+                text: "Select location";
+                horizontal-alignment: center;
+                font-size: 16px;
+                font-weight: 600;
+            }
+
+            Image {
+                source: @image-url("./images/icon-filter-circle.svg");
+                height: 24px;
+                opacity: input_filter.has-hover ? 0.8 : 0.6;
+                input_filter := TouchArea {
+                    clicked => {
+                        root.on_close();
+                    }
+                }
+            }
+        }
+
+        HorizontalBox {
+            padding-left: 24px;
+            padding-right: self.padding-left;
+            Rectangle {
+                height: 40px;
+                border-radius: 4px;
+                background: input.has-focus ? #fff : #fff2;
+                input := TextInput {
+                    color: self.has-focus ? #000 : #fff9;
+                    x: 40px;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                    font-size: 15px;
+                }
+
+                Image {
+                    x: 8px;
+                    source: @image-url("./images/icon-search.svg");
+                    height: 28px;
+                    colorize: input.has-focus ? #000000 : #fffa;
+                }
+            }
+        }
+
+        ScrollView {
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            VerticalBox {
+                padding: 0px;
+                spacing: 1px;
+
+                SelectLocationSection {
+                    text: "Custom lists";
+                }
+
+                Rectangle {
+                    height: 16px;
+                }
+
+                SelectLocationSection {
+                    text: "All locations";
+                }
+
+                for country in countries: Rectangle {
+                    background: MullvadPalette.dim_blue;
+                    height: 48px;
+                    width: 100%;
+
+                    Rectangle {
+                        x: 20px;
+                        height: 16px;
+                        width: self.height;
+                        border-radius: self.width / 2;
+                        background: #2dab53; // TODO
+                    }
+
+                    Text {
+                        text: country.name;
+                        color: white;
+                        x: 48px;
+                        font-size: 14px;
+                    }
+
+                    Image {
+                        x: parent.width - self.width - 10px;
+                        height: 30px;
+                        opacity: 0.7;
+                        source: @image-url("./images/icon-chevron-down.svg");
+                    }
+                }
+            }
+        }
+    }
+}

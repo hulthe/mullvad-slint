@@ -1,0 +1,29 @@
+import { MullvadPalette } from "palette.slint";
+export component FeatureIndicator {
+    in-out property <string> text <=> txt.text;
+
+    Rectangle {
+        background: MullvadPalette.dark_blue;
+        border-radius: 4px;
+        height: txt.height + 2px;
+        txt := Text {
+            horizontal-alignment: center;
+            color: white;
+            text: "Cookie";
+        }
+    }
+}
+
+export component FeatureIndicators {
+    HorizontalLayout {
+        spacing: 8px;
+
+        FeatureIndicator {
+            text: "Quantum resistance";
+        }
+
+        FeatureIndicator {
+            text: "Obfuscation";
+        }
+    }
+}

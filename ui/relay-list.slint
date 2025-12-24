@@ -1,0 +1,17 @@
+export struct Relay {
+    hostname: string,
+}
+
+export struct City {
+    name: string,
+    relays: [Relay],
+}
+
+export struct Country {
+    name: string,
+    cities: [City],
+}
+
+export global RelayList {
+    in-out property <[Country]> countries;
+}

@@ -1,0 +1,164 @@
+
+import { Button, VerticalBox, Spinner } from "std-widgets.slint";
+import { MullvadPalette } from "./palette.slint";
+import { Connection, ConnectionState } from "./connection.slint";
+import { FeatureIndicators } from "feature-indicator.slint";
+
+component ConnectButton inherits Rectangle {
+    in-out property <string> text: Connection.is-disconnected ? "Connect" : "Disconnect";
+    callback clicked <=> touch.clicked;
+
+    border-radius: 4px;
+    height: 32px;
+
+    background: Connection.is-secure ? (touch.pressed ? MullvadPalette.disconnected_red_dark : touch.has-hover ? MullvadPalette.disconnected_red_dark : MullvadPalette.disconnected_red) : (touch.pressed ? MullvadPalette.connected_green : touch.has-hover ? MullvadPalette.connected_green : MullvadPalette.connected_green);
+
+    Text {
+        text: text;
+        color: white;
+        font-size: 11pt;
+        font-weight: 550;
+    }
+
+    // This component will capture input events (e.g. mouse clicks)
+    touch := TouchArea { }
+}
+
+component LocationButton inherits Rectangle {
+    in-out property <string> text: "Switch Location";
+    callback clicked <=> touch.clicked;
+
+    border-radius: 4px;
+    height: 32px;
+
+    background: touch.pressed ? MullvadPalette.light_blue : touch.has-hover ? MullvadPalette.dim_blue : MullvadPalette.light_blue;
+    Text {
+        text: text;
+        color: white;
+        font-size: 11pt;
+        font-weight: 550;
+    }
+
+    // This component will capture input events (e.g. mouse clicks)
+    touch := TouchArea { }
+}
+
+component DashboardHeader {
+    in-out property <string> location: "Sweden";
+    in-out property <string> relay: "";
+    callback clicked <=> touch.clicked;
+
+    property <string> state-text: {
+        if Connection.is-connected {
+            "CONNECTED"
+        } else if Connection.is-disconnected {
+            "DISCONNECTED"
+        } else if Connection.is-disconnecting {
+            "DISCONNECTING..."
+        } else if Connection.is-connecting {
+            "CONNECTING..."
+        } else {
+            "ERROR"
+        }
+    };
+
+    touch := TouchArea { }
+
+    VerticalLayout {
+        state := HorizontalLayout {
+            Text {
+                text: root.state-text;
+                color: Connection.is-connected ? MullvadPalette.connected_green : Connection.is-disconnected ? MullvadPalette.disconnected_red : white;
+                font-size: 12pt;
+                font-weight: 600;
+            }
+
+            Image {
+                horizontal-alignment: right;
+                source: @image-url("./images/icon-chevron-up.svg");
+                height: 24px;
+                width: 24px;
+            }
+        }
+
+        location_txt := Text {
+            text: root.location;
+            color: white;
+            font-size: 12pt;
+        }
+
+        // Use a rectangle so we can clip the text when animating.
+        Rectangle {
+            clip: true;
+            height: relay.is-empty ? 0 : txt.height;
+            animate height {
+                easing: ease-out;
+                duration: 0.2s;
+            }
+            txt := Text {
+                y: 0;
+                x: 0;
+                text: root.relay;
+                color: #aaaaaa; // TODO: use the right value
+
+            }
+        }
+    }
+}
+
+export component Dashboard {
+    in-out property <length> anchor_y: 0px;
+    callback on_switch_location <=> location_button.clicked;
+    callback on_connect <=> cb.clicked;
+
+    Rectangle {
+        border-radius: 16px;
+        background: MullvadPalette.dark_blue_transparent;
+
+        VerticalBox {
+            alignment: end;
+            padding: 16px;
+            spacing: 16px;
+
+            header := DashboardHeader {
+                clicked => {
+                    cb.clicked();
+                }
+            }
+
+            FeatureIndicators { }
+
+            location_button := LocationButton { }
+
+            cb := ConnectButton {
+                // Mock the connected/disconnected state
+                clicked => {
+                    if Connection.is-connected {
+                        Connection.state = ConnectionState.disconnecting;
+                    } else if Connection.is-disconnecting {
+                        Connection.state = ConnectionState.error;
+                    } else if Connection.is-error {
+                        Connection.state = ConnectionState.disconnected;
+                    } else if Connection.is-disconnected {
+                        Connection.state = ConnectionState.connecting;
+                    } else {
+                        Connection.state = ConnectionState.connected;
+                    }
+                    if Connection.is-secure {
+                        self.text = "Disconnect";
+                    } else {
+                        self.text = "Connect";
+                    }
+
+                    if Connection.is-connected || Connection.is-connecting {
+                        header.relay = "se-got-wg-001";
+                        header.location = "Sweden, Gothenburg";
+                    } else {
+                        header.relay = "";
+                        header.location = "Sweden";
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,39 @@
+[package]
+name = "mullvad-slint"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.bundle]
+name = "Mullvad Slint"
+identifier = "mullvadvpn-app.mullvad.net"
+short_description = "A minimal Mullvad VPN example, in Slint!"
+icon = ["./ui/images/icon.png"]
+
+[dependencies]
+anyhow = "1.0.99"
+futures = "0.3.31"
+image = { version = "0.25.8", default-features = false, features = ["png"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+tokio = { version = "1.47.1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+tray-item = { version = "0.10.0", features = ["ksni"] }
+
+[dependencies.mullvad-management-interface]
+git = "https://github.com/mullvad/mullvadvpn-app.git"
+[dependencies.mullvad-types]
+git = "https://github.com/mullvad/mullvadvpn-app.git"
+
+[dependencies.slint]
+version = "1.13.0"
+default-features = false
+features = [
+	"std",
+	"compat-1-2",
+	"accessibility",
+	"backend-winit",
+	"renderer-skia-opengl",
+	"live-preview",
+]
+
+[build-dependencies]
+slint-build = "1.13.0"

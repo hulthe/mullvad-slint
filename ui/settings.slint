@@ -1,0 +1,184 @@
+
+import { HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
+import { MullvadPalette } from "palette.slint";
+import { RelayList, Country } from "relay-list.slint";
+
+export global Settings {
+    in-out property <bool> allow-lan: false;
+    callback set-allow-lan(bool);
+    set-allow-lan(enabled) => {
+        allow-lan = enabled;
+    }
+
+    in-out property <bool> enable-ipv6: false;
+    callback set-enable-ipv6(bool);
+    set-enable-ipv6(enabled) => {
+        enable-ipv6 = enabled;
+    }
+
+    in-out property <bool> daita-enabled: false;
+    callback set-daita-enabled(bool);
+    set-daita-enabled(enabled) => {
+        daita-enabled = enabled;
+    }
+
+    in-out property <bool> daita-direct-only: false;
+    callback set-daita-direct-only(bool);
+    set-daita-direct-only(enabled) => {
+        daita-direct-only = enabled;
+    }
+}
+
+component SettingsToggle inherits Rectangle {
+    in property text <=> txt.text;
+    in-out property <bool> is_enabled: false;
+    callback changed(bool);
+    callback enabled();
+    callback disabled();
+
+    background: MullvadPalette.light_blue;
+    height: 48px;
+
+    txt := Text {
+        text: "Toggle";
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        x: 16px;
+    }
+
+    Rectangle {
+        x: 268px;
+        width: 36px;
+        height: 24px;
+        border-radius: 16px;
+        border-width: 2px;
+        border-color: white;
+
+        Rectangle {
+            //color: transparent;
+            width: 16px;
+            height: 16px;
+            border-radius: 10px;
+
+            x: is_enabled ? (parent.width - self.width - 4px) : 4px;
+            background: is_enabled ? MullvadPalette.connected_green : MullvadPalette.disconnected_red;
+
+            animate x, background {
+                easing: linear;
+                duration: 0.2s;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            is_enabled = !is_enabled;
+            changed(is_enabled);
+            if is_enabled {
+                enabled();
+            } else {
+                disabled();
+            }
+        }
+    }
+}
+
+export component SettingsView inherits Rectangle {
+    in property <[Country]> countries: [
+        { name: "Sweden", cities: [] },
+        { name: "Burma", cities: [] },
+        { name: "Taiwan", cities: [] },
+    ];
+    callback close-clicked();
+
+    width: 320px;
+    height: 568px;
+    background: MullvadPalette.dark_blue;
+
+    VerticalBox {
+        padding: 0;
+        HorizontalBox {
+            alignment: space-between;
+
+            Image {
+                source: @image-url("./images/icon-chevron-down-circle.svg");
+                height: 24px;
+                opacity: input_close.has-hover ? 0.8 : 0.6;
+                input_close := TouchArea {
+                    clicked => {
+                        root.close-clicked();
+                    }
+                }
+            }
+
+            Text {
+                color: white;
+                text: "Settings";
+                horizontal-alignment: center;
+                font-size: 16px;
+                font-weight: 600;
+            }
+
+            Image {
+                source: @image-url("./images/icon-chevron-down-circle.svg");
+                height: 24px;
+                opacity: input_filter.has-hover ? 0.8 : 0.6;
+                input_filter := TouchArea {
+                    clicked => {
+                        root.close-clicked();
+                    }
+                }
+            }
+        }
+
+        ScrollView {
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            VerticalBox {
+                padding: 0px;
+                spacing: 1px;
+
+                SettingsToggle {
+                    text: "Local network sharing";
+                    is-enabled <=> Settings.allow-lan;
+                    changed(enabled) => {
+                        Settings.set-allow-lan(enabled)
+                    }
+                }
+
+                Rectangle {
+                    height: 16px;
+                }
+
+                SettingsToggle {
+                    text: "Enable IPv6";
+                    is-enabled <=> Settings.enable-ipv6;
+                    changed(enabled) => {
+                        Settings.set-enable-ipv6(enabled)
+                    }
+                }
+
+                Rectangle {
+                    height: 16px;
+                }
+
+                SettingsToggle {
+                    text: "DAITA";
+                    is-enabled <=> Settings.daita-enabled;
+                    changed(enabled) => {
+                        Settings.set-daita-enabled(enabled)
+                    }
+                }
+
+                SettingsToggle {
+                    text: "Direct Only";
+                    is-enabled <=> Settings.daita-direct-only;
+                    changed(enabled) => {
+                        Settings.set-daita-direct-only(enabled)
+                    }
+                }
+            }
+        }
+    }
+}

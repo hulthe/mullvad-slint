@@ -1,0 +1,47 @@
+
+import { Connection } from "connection.slint";
+import { MullvadPalette } from "palette.slint";
+export component MainHeader inherits Rectangle {
+    height: 80px;
+    background: Connection.is-secure ? MullvadPalette.connected_green : MullvadPalette.disconnected_red;
+    animate background {
+        easing: linear;
+        duration: 0.25s;
+    }
+
+    callback account_clicked <=> touch_a.clicked;
+    callback settings_clicked <=> touch_b.clicked;
+
+    Image {
+        source: @image-url("./images/icon.svg");
+        height: 40px;
+        width: self.height;
+        x: 16px;
+        y: 16px;
+    }
+
+    Image {
+        source: @image-url("./images/logo-text.svg");
+        height: 15px;
+        x: 66px;
+        y: 28px;
+    }
+
+    Image {
+        source: @image-url("./images/icon-account-circle.svg");
+        height: 23px;
+        x: 240px;
+        y: 24px;
+        opacity: touch_a.has-hover ? 1.0 : 0.6;
+        touch_a := TouchArea { }
+    }
+
+    Image {
+        source: @image-url("./images/icon-settings-filled.svg");
+        height: 23px;
+        x: 280px;
+        y: 24px;
+        opacity: touch_b.has-hover ? 1.0 : 0.6;
+        touch_b := TouchArea { }
+    }
+}
