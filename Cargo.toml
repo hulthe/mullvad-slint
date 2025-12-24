@@ -24,7 +24,7 @@ git = "https://github.com/mullvad/mullvadvpn-app.git"
 git = "https://github.com/mullvad/mullvadvpn-app.git"
 
 [dependencies.slint]
-version = "1.13.0"
+version = "1.14.1"
 default-features = false
 features = [
 	"std",
@@ -36,4 +36,4 @@ features = [
 ]
 
 [build-dependencies]
-slint-build = "1.13.0"
+slint-build = "1.14.1"

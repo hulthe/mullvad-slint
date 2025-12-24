@@ -1,0 +1,58 @@
+use crate::RT;
+use std::sync::Arc;
+
+use anyhow::Context;
+use mullvad_management_interface::MullvadProxyClient;
+use tokio::sync::{Mutex, OwnedMappedMutexGuard, OwnedMutexGuard};
+
+#[derive(Clone)]
+pub struct Rpc {
+    rpc: Arc<Mutex<Option<MullvadProxyClient>>>,
+}
+
+impl Rpc {
+    pub fn new() -> Self {
+        Self {
+            rpc: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Try to execute a function with MullvadProxyClient
+    pub async fn with_rpc<Fn, Fut, T>(&self, f: Fn) -> anyhow::Result<T>
+    where
+        Fn: FnOnce(OwnedMappedMutexGuard<Option<MullvadProxyClient>, MullvadProxyClient>) -> Fut,
+        Fut: Future<Output = anyhow::Result<T>>,
+    {
+        let mut rpc_option = self.rpc.clone().lock_owned().await;
+
+        if rpc_option.is_none() {
+            let rpc = MullvadProxyClient::new()
+                .await
+                .context("Failed to open RPC connection")?;
+            *rpc_option = Some(rpc);
+        };
+
+        let rpc = OwnedMutexGuard::map(rpc_option, |option: &mut Option<_>| {
+            option.as_mut().unwrap()
+        });
+
+        f(rpc).await
+    }
+
+    pub fn invoke<Fn, Fut>(&self, f: Fn)
+    where
+        Fn: FnOnce(OwnedMappedMutexGuard<Option<MullvadProxyClient>, MullvadProxyClient>) -> Fut,
+        Fut: Future<Output = anyhow::Result<()>>,
+        Fn: Send + 'static,
+        Fut: Send,
+    {
+        let this = self.clone();
+
+        RT.spawn(async move {
+            let result = this.with_rpc(f).await;
+            if let Err(e) = result {
+                eprintln!("{e:#?}");
+            }
+        });
+    }
+}

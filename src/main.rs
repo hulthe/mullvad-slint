@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod api;
+mod rpc;
 mod tray;
 
 mod my_slint {
@@ -10,21 +11,16 @@ mod my_slint {
     impl Eq for Relay {}
 }
 
-use std::{
-    collections::BTreeMap,
-    rc::Rc,
-    sync::{Arc, LazyLock},
-};
+use std::{collections::BTreeMap, rc::Rc, sync::LazyLock};
 
 use anyhow::Context;
 use futures::StreamExt as _;
-use mullvad_management_interface::{MullvadProxyClient, client::DaemonEvent};
+use mullvad_management_interface::client::DaemonEvent;
 use mullvad_types::states::TunnelState;
 use my_slint::Country;
 use slint::{ComponentHandle as _, ModelRc, VecModel, invoke_from_event_loop};
-use tokio::sync::{Mutex, OwnedMappedMutexGuard, OwnedMutexGuard};
 
-use crate::{my_slint::ConnectionState, tray::create_tray_icon};
+use crate::{my_slint::ConnectionState, rpc::Rpc, tray::create_tray_icon};
 
 // Convert API relay list from Rust to a Slint list of countries.
 // A [ModelRc] is just a Slint list.
@@ -68,57 +64,6 @@ fn relay_list_to_slint(relay_list: &api::RelayList) -> ModelRc<Country> {
 
 const RELAY_LIST: &str = include_str!("relays.json");
 
-#[derive(Clone)]
-struct RpcTask {
-    rpc: Arc<Mutex<Option<MullvadProxyClient>>>,
-}
-
-impl RpcTask {
-    pub fn new() -> Self {
-        Self {
-            rpc: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    pub async fn with_rpc<Fn, Fut, T>(&self, f: Fn) -> anyhow::Result<T>
-    where
-        Fn: FnOnce(OwnedMappedMutexGuard<Option<MullvadProxyClient>, MullvadProxyClient>) -> Fut,
-        Fut: Future<Output = anyhow::Result<T>>,
-    {
-        let mut rpc_option = self.rpc.clone().lock_owned().await;
-
-        if rpc_option.is_none() {
-            let rpc = MullvadProxyClient::new()
-                .await
-                .context("Failed to open RPC connection")?;
-            *rpc_option = Some(rpc);
-        };
-
-        let rpc = OwnedMutexGuard::map(rpc_option, |option: &mut Option<_>| {
-            option.as_mut().unwrap()
-        });
-
-        f(rpc).await
-    }
-
-    pub fn invoke<Fn, Fut>(&self, f: Fn)
-    where
-        Fn: FnOnce(OwnedMappedMutexGuard<Option<MullvadProxyClient>, MullvadProxyClient>) -> Fut,
-        Fut: Future<Output = anyhow::Result<()>>,
-        Fn: Send + 'static,
-        Fut: Send,
-    {
-        let this = self.clone();
-
-        RT.spawn(async move {
-            let result = this.with_rpc(f).await;
-            if let Err(e) = result {
-                eprintln!("{e:#?}");
-            }
-        });
-    }
-}
-
 static RT: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -130,7 +75,7 @@ fn main() -> anyhow::Result<()> {
     let relay_list: api::RelayList =
         serde_json::from_str(RELAY_LIST).expect("Failed to parse relay-list");
 
-    let rpc = RpcTask::new();
+    let rpc = Rpc::new();
     let rpc2 = rpc.clone();
 
     let _tray = create_tray_icon();
