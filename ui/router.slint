@@ -1,0 +1,85 @@
+import { Button } from "std-widgets.slint";
+import { MainView } from "main-view.slint";
+import { SettingsView, DaitaView, MultihopView, VpnSettingsView, AntiCensorshipView } from "settings.slint";
+import { SelectLocationView } from "select-location.slint";
+import { View, Route } from "route.slint";
+
+component RouterView {
+    animate x, y {
+        duration: 0.5s;
+        easing: ease-in-out;
+    }
+
+    @children
+}
+
+export component Router {
+    RouterView {
+        width: root.width;
+        height: root.height;
+        MainView {
+            width: root.width;
+            height: root.height;
+        }
+    }
+
+    RouterView {
+        y: Route.settings.show ? 0px : root.height;
+        width: root.width;
+        height: root.height;
+        SettingsView {
+            width: root.width;
+            height: root.height;
+        }
+    }
+
+    RouterView {
+        x: Route.daita.show ? 0px : root.width;
+        width: root.width;
+        height: root.height;
+        DaitaView {
+            width: root.width;
+            height: root.height;
+        }
+    }
+
+    RouterView {
+        x: Route.multihop.show ? 0px : root.width;
+        width: root.width;
+        height: root.height;
+        MultihopView {
+            width: root.width;
+            height: root.height;
+        }
+    }
+
+    RouterView {
+        x: Route.vpn-settings.show ? 0px : root.width;
+        width: root.width;
+        height: root.height;
+        VpnSettingsView {
+            width: root.width;
+            height: root.height;
+        }
+    }
+
+    RouterView {
+        x: Route.anti-censorship.show ? 0px : root.width;
+        width: root.width;
+        height: root.height;
+        AntiCensorshipView {
+            width: root.width;
+            height: root.height;
+        }
+    }
+
+    RouterView {
+        y: Route.select-location.show ? 0px : root.height;
+        width: root.width;
+        height: root.height;
+        SelectLocationView {
+            width: root.width;
+            height: root.height;
+        }
+    }
+}

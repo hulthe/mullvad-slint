@@ -1,0 +1,24 @@
+import { Dashboard }from "./dashboard.slint";
+import { MainHeader } from "main-header.slint";
+
+export component MainView {
+    /// Callback for hitting the "Switch Location" button
+    callback connect-clicked <=> dashboard.on-connect;
+    callback account-clicked <=> header.account-clicked;
+    callback settings-clicked <=> header.settings-clicked;
+
+    // Empty space around the dashboard
+    property <length> dashboard-padding: 16px;
+
+    // Header bar
+    header := MainHeader {
+        y: 0; // anchor to top of window
+    }
+
+    dashboard := Dashboard {
+        // anchor the dashboard to the bottom of the window
+        y: root.height - self.height - dashboard-padding;
+        width: 320px - 2 * dashboard-padding;
+    }
+}
+

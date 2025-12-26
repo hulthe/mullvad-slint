@@ -1,85 +1,20 @@
-import { Button, VerticalBox, Spinner, ListView, ScrollView, HorizontalBox } from "std-widgets.slint";
 import { MullvadPalette } from "./palette.slint";
-import { Dashboard }from "./dashboard.slint";
-import { Connection, ConnectionState } from "connection.slint";
-import { MainHeader } from "main-header.slint";
-import { SelectLocation } from "select-location.slint";
-import { Settings, SettingsView } from "settings.slint";
-import { RelayList, Country, City, Relay } from "relay-list.slint";
-export { RelayList, Country, City, Relay }
-export { Connection, ConnectionState }
-export { Settings }
+import { Router } from "router.slint";
 
-component MainView {
-    /// Callback for hitting the "Switch Location" button
-    callback switch-location-clicked <=> dashboard.on-switch-location;
-    callback connect-clicked <=> dashboard.on-connect;
-    callback account-clicked <=> header.account-clicked;
-    callback settings-clicked <=> header.settings-clicked;
+import { State } from "state.slint";
+export { State }
 
-    // Empty space around the dashboard
-    property <length> dashboard-padding: 16px;
-
-    width: 320px;
-    height: 568px;
-
-    // Header bar
-    header := MainHeader {
-        y: 0; // anchor to top of window
-    }
-
-    dashboard := Dashboard {
-        // anchor the dashboard to the bottom of the window
-        y: root.height - self.height - dashboard-padding;
-        width: 320px - 2 * dashboard-padding;
-    }
-}
+import { RelayList} from "relay-list.slint";
+export { RelayList }
 
 export component AppWindow inherits Window {
-    width: 320px;
-    height: 568px;
+    title: "Mullvad VPN";
+    preferred-width: 320px;
+    preferred-height: 568px;
     background: MullvadPalette.dark_blue;
 
-    in property <[Country]> countries: [];
-    property <bool> show-select-location: false;
-    property <bool> show-settings: false;
-
-    callback connect-clicked <=> main.connect-clicked;
-
-    main := MainView {
-        switch-location-clicked => {
-            show-select-location = true;
-        }
-        settings-clicked => {
-            show-settings = true;
-        }
-    }
-
-    SelectLocation {
-        on_close => {
-            show-select-location = false;
-        }
-
-        countries: RelayList.countries;
-
-        // Animate by sliding in from the bottom of the screen
-        y: show-select-location ? 0 : root.height;
-        animate y {
-            easing: ease-in-out;
-            duration: 0.5s;
-        }
-    }
-
-    SettingsView {
-        close-clicked => {
-            show-settings = false;
-        }
-
-        // Animate by sliding in from the bottom of the screen
-        y: show-settings ? 0 : root.height;
-        animate y {
-            easing: ease-in-out;
-            duration: 0.5s;
-        }
+    Router {
+        width: root.width;
+        height: root.height;
     }
 }

@@ -18,7 +18,7 @@ use futures::StreamExt as _;
 use mullvad_management_interface::client::DaemonEvent;
 use mullvad_types::states::TunnelState;
 use my_slint::Country;
-use slint::{ComponentHandle as _, ModelRc, VecModel, invoke_from_event_loop};
+use slint::{ComponentHandle as _, ModelRc, VecModel};
 
 use crate::{my_slint::ConnectionState, rpc::Rpc, tray::create_tray_icon};
 
@@ -86,11 +86,12 @@ fn main() -> anyhow::Result<()> {
 
     app.global::<my_slint::RelayList>()
         .set_countries(countries.clone());
-    app.set_countries(countries);
+
+    let ui_state = app.global::<my_slint::State>();
 
     {
         let rpc = rpc.clone();
-        app.on_connect_clicked(move || {
+        ui_state.on_connect_button(move || {
             rpc.invoke(|mut rpc| async move {
                 if rpc.get_tunnel_state().await?.is_disconnected() {
                     rpc.connect_tunnel().await?;
@@ -102,12 +103,10 @@ fn main() -> anyhow::Result<()> {
         });
     }
 
-    let settings = app.global::<my_slint::Settings>();
-
     macro_rules! bind_boolean_rpc {
         ($ui_callback:ident, $rpc_fn:ident) => {{
             let rpc = rpc.clone();
-            settings.$ui_callback(move |enabled| {
+            ui_state.$ui_callback(move |enabled| {
                 rpc.invoke(async move |mut rpc| {
                     rpc.$rpc_fn(enabled).await?;
                     Ok(())
@@ -144,7 +143,7 @@ fn main() -> anyhow::Result<()> {
             .unwrap();
 
         let update_state = |tunnel_state: &TunnelState| {
-            let state = match tunnel_state {
+            let conn_state = match tunnel_state {
                 TunnelState::Disconnected { .. } => ConnectionState::Disconnected,
                 TunnelState::Connecting { .. } => ConnectionState::Connecting,
                 TunnelState::Connected { .. } => ConnectionState::Connected,
@@ -152,31 +151,25 @@ fn main() -> anyhow::Result<()> {
                 TunnelState::Error(..) => ConnectionState::Error,
             };
 
-            let app_weak = app_weak.clone();
-            invoke_from_event_loop(move || {
-                if let Some(app) = app_weak.upgrade() {
-                    app.global::<my_slint::Connection>().set_state(state);
-                };
+            app_weak.upgrade_in_event_loop(move |app| {
+                app.global::<my_slint::State>().set_conn(conn_state);
             })
         };
 
         let update_settings = |settings: &mullvad_types::settings::Settings| {
             let settings = settings.clone();
-            let app_weak = app_weak.clone();
-            invoke_from_event_loop(move || {
-                if let Some(app) = app_weak.upgrade() {
-                    let settings_ui = app.global::<my_slint::Settings>();
-                    settings_ui.set_allow_lan(settings.allow_lan);
-                    settings_ui.set_enable_ipv6(settings.tunnel_options.generic.enable_ipv6);
-                    settings_ui.set_daita_enabled(settings.tunnel_options.wireguard.daita.enabled);
-                    settings_ui.set_daita_direct_only(
-                        !settings
-                            .tunnel_options
-                            .wireguard
-                            .daita
-                            .use_multihop_if_necessary,
-                    );
-                };
+            app_weak.upgrade_in_event_loop(move |app| {
+                let ui_state = app.global::<my_slint::State>();
+                ui_state.set_allow_lan(settings.allow_lan);
+                ui_state.set_enable_ipv6(settings.tunnel_options.generic.enable_ipv6);
+                ui_state.set_daita_enabled(settings.tunnel_options.wireguard.daita.enabled);
+                ui_state.set_daita_direct_only(
+                    !settings
+                        .tunnel_options
+                        .wireguard
+                        .daita
+                        .use_multihop_if_necessary,
+                );
             })
         };
 

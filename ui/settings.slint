@@ -2,6 +2,7 @@
 import { HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
 import { MullvadPalette } from "palette.slint";
 import { RelayList, Country } from "relay-list.slint";
+import { Route } from "route.slint";
 
 export global Settings {
     in-out property <bool> allow-lan: false;
@@ -29,57 +30,348 @@ export global Settings {
     }
 }
 
-component SettingsToggle inherits Rectangle {
-    in property text <=> txt.text;
+component RedGreenToggle inherits Rectangle {
     in-out property <bool> is_enabled: false;
-    callback changed(bool);
-    callback enabled();
-    callback disabled();
 
-    background: MullvadPalette.light_blue;
-    height: 48px;
+    width: 36px;
+    height: 24px;
+    border-radius: 16px;
+    border-width: 2px;
+    border-color: white;
 
-    txt := Text {
-        text: "Toggle";
+    Rectangle {
+        width: 16px;
+        height: 16px;
+        border-radius: 10px;
+
+        x: is_enabled ? (parent.width - self.width - 4px) : 4px;
+        background: is_enabled ? MullvadPalette.connected_green : MullvadPalette.disconnected_red;
+
+        animate x, background {
+            easing: linear;
+            duration: 0.2s;
+        }
+    }
+    
+}
+
+component SettingsItem inherits Rectangle {
+    in property <bool> round_top: true;
+    in property <bool> round_bottom: true;
+
+    out property <bool> has-hover: touch.has-hover;
+    out property <bool> pressed: touch.pressed;
+    callback clicked();
+
+    background: touch.pressed ? MullvadPalette.lightest_blue : touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.light_blue;
+    height: 48px;    
+    border_top_left_radius: round_top ? 16px : 0px;
+    border_top_right_radius: round_top ? 16px : 0px;
+    border_bottom_left_radius: round_bottom ? 16px : 0px;
+    border_bottom_right_radius: round_bottom ? 16px : 0px;
+
+    touch := TouchArea {
+        clicked => root.clicked();
+    }
+}
+
+component SettingsMenu inherits SettingsItem {
+    in property <string> text: "";
+
+    if text != "" : Text {
+        text: text;
         color: white;
         font-size: 16px;
         font-weight: 600;
         x: 16px;
     }
 
-    Rectangle {
-        x: 268px;
-        width: 36px;
+    Image {
+        x: root.width - 36px;
+        source: @image-url("./images/icon-chevron-right.svg");
         height: 24px;
-        border-radius: 16px;
-        border-width: 2px;
-        border-color: white;
+    }
+}
 
-        Rectangle {
-            //color: transparent;
-            width: 16px;
-            height: 16px;
-            border-radius: 10px;
+component SettingsToggle inherits SettingsItem {
+    in property <string> text: "";
+    in-out property <bool> is_enabled: false;
+    callback changed(bool);
+    callback enabled();
+    callback disabled();
 
-            x: is_enabled ? (parent.width - self.width - 4px) : 4px;
-            background: is_enabled ? MullvadPalette.connected_green : MullvadPalette.disconnected_red;
-
-            animate x, background {
-                easing: linear;
-                duration: 0.2s;
-            }
+    clicked => {
+        is_enabled = !is_enabled;
+        changed(is_enabled);
+        if is_enabled {
+            enabled();
+        } else {
+            disabled();
         }
     }
 
-    touch := TouchArea {
-        clicked => {
-            is_enabled = !is_enabled;
-            changed(is_enabled);
-            if is_enabled {
-                enabled();
-            } else {
-                disabled();
+    if text != "" : Text {
+        text: text;
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        x: 16px;
+    }
+
+    RedGreenToggle {
+        x: root.width - 52px;
+        is_enabled <=> root.is_enabled;
+    }
+}
+
+component SettingsSelectable inherits SettingsItem {
+    in property <string> text: "";
+    in-out property <bool> selected: false;
+    background: self.pressed   ? MullvadPalette.lightest_blue
+              : self.has-hover ? MullvadPalette.lighter_blue
+              :                  MullvadPalette.dim_blue;
+
+    if selected : Image {
+        source: @image-url("./images/icon-checkmark.svg");
+        x: 12px;
+        height: 24px;
+        colorize: green;
+    }
+
+    if text != "" : Text {
+        text: text;
+        color: selected ? green : white;
+        font-size: 14px;
+        font-weight: selected ? 600 : 400;
+        x: 42px;
+    }
+}
+
+component SettingsSubView inherits Rectangle {
+    background: MullvadPalette.dark_blue;
+    in property <string> title: "Title";
+    callback on-exit();
+
+    VerticalLayout {
+        HorizontalLayout {
+            width: parent.width;
+            alignment: start;
+            padding: 16px;
+            padding-bottom: 8px;
+            Image {
+                source: @image-url("./images/icon-chevron-left-circle.svg");
+                height: 24px;
+                opacity: input_close.has-hover ? 0.8 : 0.6;
+                input_close := TouchArea {
+                    clicked => on-exit();
+                }
             }
+        }
+
+        ScrollView {
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+
+            VerticalLayout {
+                alignment: start;
+                padding: 16px;
+                padding-top: 0px;
+                spacing: 16px;
+
+                Text {
+                    font-size: 28px;
+                    font-weight: 800;
+                    text: root.title;
+                }
+
+                @children
+            }
+        }
+    }
+}
+
+export component DaitaView inherits SettingsSubView {
+    title: "DAITA";
+    on-exit => { Route.daita.show = false; }
+
+    // TODO: DAITA carousel
+    VerticalLayout {
+        spacing: 8px;
+        Image {
+            source: @image-url("./images/daita-on-illustration.svg");
+        }
+
+        Text {
+            wrap: word-wrap;
+            color: #fffa;
+            font-weight: 200;
+            text: "If an observer monitors these data packets, DAITA makes it significantly harder for them to identify which websites you are visiting or with whom you are communicating.";
+        }
+
+        Text {
+            wrap: word-wrap;
+            color: #fffa;
+            font-weight: 200;
+            text: "DAITA does this by carefully adding network noise and making all network packets the same size.";
+        }
+
+        Text {
+            wrap: word-wrap;
+            color: #fffa;
+            font-weight: 200;
+            text: "Not all our servers are DAITA-enabled. Therefore, we use multihop automatically to enable DAITA with any server.";
+        }
+    }
+
+    VerticalLayout {
+        spacing: 1px;
+        SettingsToggle {
+            text: "Enable";
+            round-bottom: false;
+            is-enabled <=> Settings.daita-enabled;
+            changed(enabled) => {
+                Settings.set-daita-enabled(enabled)
+            }
+        }
+
+        SettingsToggle {
+            text: "Direct only";
+            round-top: false;
+            // is-enabled <=> Settings.daita-enabled;
+            // changed(enabled) => {
+            //     Settings.set-daita-enabled(enabled)
+            // }
+        }
+    }
+}
+
+export component MultihopView inherits SettingsSubView {
+    title: "Multihop";
+    on-exit => { Route.multihop.show = false; }
+
+    Image {
+        source: @image-url("./images/multihop-illustration.svg");
+    }
+
+    Text {
+        wrap: word-wrap;
+        color: #fffa;
+        font-weight: 200;
+        text: "Multihop routes your traffic into one WireGuard server and out another, making it harder to trace. This results in increased latency but increases anonymity online.";
+    }
+
+    SettingsToggle {
+        text: "Enable";
+        // is-enabled <=> Settings.multihop-enabled;
+        // changed(enabled) => {
+        //     Settings.set-multhop-enabled(enabled)
+        // }
+    }
+}
+
+export component AntiCensorshipView inherits SettingsSubView {
+    title: "Anti-censorship";
+    on-exit => { Route.anti-censorship.show = false; }
+}
+
+export component VpnSettingsView inherits SettingsSubView {
+    title: "VPN settings";
+    on-exit => { Route.vpn-settings.show = false; }
+
+    VerticalLayout {
+        spacing: 1px;
+        SettingsToggle {
+            text: "Launch app on start-up";
+            round_bottom: false;
+            // TODO
+        }
+        SettingsToggle {
+            text: "Auto-connect";
+            round_top: false;
+            // TODO
+        }
+    }
+
+    SettingsToggle {
+        text: "Local network sharing";
+        is-enabled <=> Settings.allow-lan;
+        changed(enabled) => {
+            Settings.set-allow-lan(enabled)
+        }
+    }
+
+    VerticalLayout {
+        spacing: 1px;
+        SettingsMenu {
+            text: "DNS content blockers";
+            round_bottom: false;
+            // TODO
+        }
+        SettingsToggle {
+            text: "Use custom DNS server";
+            round_top: false;
+            // TODO
+        }
+    }
+
+    SettingsToggle {
+        text: "In-tunnel IPv6";
+        is-enabled <=> Settings.enable-ipv6;
+        changed(enabled) => {
+            Settings.set-enable-ipv6(enabled)
+        }
+    }
+
+    VerticalLayout {
+        spacing: 1px;
+        SettingsToggle {
+            text: "Kill switch";
+            // TODO: make non-interactable
+            is-enabled: true;
+            round_bottom: false;
+            // TODO
+        }
+
+        SettingsToggle {
+            text: "Lockdown mode";
+            round_top: false;
+            // TODO
+        }
+    }
+
+
+    SettingsMenu {
+        text: "Anti-censorship";
+        clicked => {
+            Route.anti-censorship.show = true;
+        }
+    }
+
+    SettingsToggle {
+        text: "Quantum-resistant tunnel";
+        // TODO
+    }
+
+    VerticalLayout {
+        spacing: 1px;
+        SettingsItem {
+            round-bottom: false;
+        }
+
+        SettingsSelectable {
+            text: "Automatic";
+            round-top: false;
+            round-bottom: false;
+            selected: true; // TODO
+        }
+        SettingsSelectable {
+            text: "IPv4";
+            round-top: false;
+            round-bottom: false;
+        }
+        SettingsSelectable {
+            text: "IPv6";
+            round-top: false;
         }
     }
 }
@@ -90,15 +382,12 @@ export component SettingsView inherits Rectangle {
         { name: "Burma", cities: [] },
         { name: "Taiwan", cities: [] },
     ];
-    callback close-clicked();
 
-    width: 320px;
-    height: 568px;
     background: MullvadPalette.dark_blue;
 
-    VerticalBox {
-        padding: 0;
-        HorizontalBox {
+    settings := VerticalLayout {
+        HorizontalLayout {
+            padding: 12px;
             alignment: space-between;
 
             Image {
@@ -107,7 +396,7 @@ export component SettingsView inherits Rectangle {
                 opacity: input_close.has-hover ? 0.8 : 0.6;
                 input_close := TouchArea {
                     clicked => {
-                        root.close-clicked();
+                        Route.settings.show = false;
                     }
                 }
             }
@@ -126,7 +415,7 @@ export component SettingsView inherits Rectangle {
                 opacity: input_filter.has-hover ? 0.8 : 0.6;
                 input_filter := TouchArea {
                     clicked => {
-                        root.close-clicked();
+                        Route.settings.show = false;
                     }
                 }
             }
@@ -135,47 +424,49 @@ export component SettingsView inherits Rectangle {
         ScrollView {
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            VerticalBox {
-                padding: 0px;
-                spacing: 1px;
 
-                SettingsToggle {
-                    text: "Local network sharing";
-                    is-enabled <=> Settings.allow-lan;
-                    changed(enabled) => {
-                        Settings.set-allow-lan(enabled)
+            VerticalLayout {
+                alignment: start;
+                padding: 16px;
+                padding-top: 0px;
+                spacing: 16px;
+
+                VerticalLayout {
+                    spacing: 1px;
+                    SettingsMenu {
+                        text: "DAITA";
+                        round_bottom: false;
+                        clicked => { Route.daita.show = true; }
+                    }
+                    SettingsMenu {
+                        text: "Multihop";
+                        round_top: false;
+                        round_bottom: false;
+                        clicked => { Route.multihop.show = true; }
+                    }
+                    SettingsMenu {
+                        text: "VPN settings";
+                        round_top: false;
+                        clicked => {
+                            Route.vpn-settings.show = true;
+                        }
                     }
                 }
-
-                Rectangle {
-                    height: 16px;
+                SettingsMenu {
+                    text: "Split tunneling";
                 }
-
-                SettingsToggle {
-                    text: "Enable IPv6";
-                    is-enabled <=> Settings.enable-ipv6;
-                    changed(enabled) => {
-                        Settings.set-enable-ipv6(enabled)
+                SettingsMenu {
+                    text: "API access";
+                }
+                VerticalLayout {
+                    spacing: 1px;
+                    SettingsMenu {
+                        text: "Support";
+                        round_bottom: false;
                     }
-                }
-
-                Rectangle {
-                    height: 16px;
-                }
-
-                SettingsToggle {
-                    text: "DAITA";
-                    is-enabled <=> Settings.daita-enabled;
-                    changed(enabled) => {
-                        Settings.set-daita-enabled(enabled)
-                    }
-                }
-
-                SettingsToggle {
-                    text: "Direct Only";
-                    is-enabled <=> Settings.daita-direct-only;
-                    changed(enabled) => {
-                        Settings.set-daita-direct-only(enabled)
+                    SettingsMenu {
+                        text: "App info";
+                        round_top: false;
                     }
                 }
             }

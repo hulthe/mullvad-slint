@@ -2,6 +2,7 @@
 import { HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
 import { MullvadPalette } from "palette.slint";
 import { RelayList, Country } from "relay-list.slint";
+import { Route } from "route.slint";
 
 component SelectLocationSection inherits Rectangle {
     in property text <=> txt.text;
@@ -18,16 +19,7 @@ component SelectLocationSection inherits Rectangle {
     }
 }
 
-export component SelectLocation inherits Rectangle {
-    in property <[Country]> countries: [
-        { name: "Sweden", cities: [] },
-        { name: "Burma",  cities: [] },
-        { name: "Taiwan", cities: [] },
-    ];
-    callback on_close();
-
-    width: 320px;
-    height: 568px;
+export component SelectLocationView inherits Rectangle {
     background: MullvadPalette.dark_blue;
 
     VerticalBox {
@@ -41,7 +33,7 @@ export component SelectLocation inherits Rectangle {
                 opacity: input_close.has-hover ? 0.8 : 0.6;
                 input_close := TouchArea {
                     clicked => {
-                        root.on_close();
+                        Route.select-location.show = false;
                     }
                 }
             }
@@ -60,7 +52,7 @@ export component SelectLocation inherits Rectangle {
                 opacity: input_filter.has-hover ? 0.8 : 0.6;
                 input_filter := TouchArea {
                     clicked => {
-                        root.on_close();
+                        // TODO filters
                     }
                 }
             }
@@ -109,7 +101,7 @@ export component SelectLocation inherits Rectangle {
                     text: "All locations";
                 }
 
-                for country in countries: Rectangle {
+                for country in RelayList.countries: Rectangle {
                     background: MullvadPalette.dim_blue;
                     height: 48px;
                     width: 100%;

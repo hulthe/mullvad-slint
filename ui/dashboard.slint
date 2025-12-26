@@ -1,17 +1,38 @@
 
 import { Button, VerticalBox, Spinner } from "std-widgets.slint";
-import { MullvadPalette } from "./palette.slint";
-import { Connection, ConnectionState } from "./connection.slint";
+import { MullvadPalette } from "palette.slint";
+import { State, ConnectionState } from "state.slint";
 import { FeatureIndicators } from "feature-indicator.slint";
+import { Route } from "route.slint";
 
 component ConnectButton inherits Rectangle {
-    in-out property <string> text: Connection.is-disconnected ? "Connect" : "Disconnect";
+    in-out property <string> text: State.is-disconnected ? "Connect" : "Disconnect";
     callback clicked <=> touch.clicked;
 
     border-radius: 4px;
     height: 32px;
 
-    background: Connection.is-secure ? (touch.pressed ? MullvadPalette.disconnected_red_dark : touch.has-hover ? MullvadPalette.disconnected_red_dark : MullvadPalette.disconnected_red) : (touch.pressed ? MullvadPalette.connected_green : touch.has-hover ? MullvadPalette.connected_green : MullvadPalette.connected_green);
+    function background-color() -> brush {
+        if State.is-secure {
+            if touch.pressed {
+                return MullvadPalette.disconnected_red_dark;
+            }
+            if touch.has-hover {
+                return MullvadPalette.disconnected_red_fade;
+            }
+            return MullvadPalette.disconnected_red;
+        }
+        
+        if touch.pressed {
+            return MullvadPalette.connected_green_dark;
+        }
+        if touch.has-hover {
+            return MullvadPalette.connected_green_fade;
+        }
+        return MullvadPalette.connected_green;
+    }
+
+    background: background-color();
 
     Text {
         text: text;
@@ -44,18 +65,16 @@ component LocationButton inherits Rectangle {
 }
 
 component DashboardHeader {
-    in-out property <string> location: "Sweden";
-    in-out property <string> relay: "";
     callback clicked <=> touch.clicked;
 
     property <string> state-text: {
-        if Connection.is-connected {
+        if State.is-connected {
             "CONNECTED"
-        } else if Connection.is-disconnected {
+        } else if State.is-disconnected {
             "DISCONNECTED"
-        } else if Connection.is-disconnecting {
+        } else if State.is-disconnecting {
             "DISCONNECTING..."
-        } else if Connection.is-connecting {
+        } else if State.is-connecting {
             "CONNECTING..."
         } else {
             "ERROR"
@@ -68,7 +87,7 @@ component DashboardHeader {
         state := HorizontalLayout {
             Text {
                 text: root.state-text;
-                color: Connection.is-connected ? MullvadPalette.connected_green : Connection.is-disconnected ? MullvadPalette.disconnected_red : white;
+                color: State.is-connected ? MullvadPalette.connected_green : State.is-disconnected ? MullvadPalette.disconnected_red : white;
                 font-size: 12pt;
                 font-weight: 600;
             }
@@ -82,7 +101,7 @@ component DashboardHeader {
         }
 
         location_txt := Text {
-            text: root.location;
+            text: State.connected-to-location;
             color: white;
             font-size: 12pt;
         }
@@ -90,7 +109,7 @@ component DashboardHeader {
         // Use a rectangle so we can clip the text when animating.
         Rectangle {
             clip: true;
-            height: relay.is-empty ? 0 : txt.height;
+            height: State.connected-to-hostname.is-empty ? 0 : txt.height;
             animate height {
                 easing: ease-out;
                 duration: 0.2s;
@@ -98,7 +117,7 @@ component DashboardHeader {
             txt := Text {
                 y: 0;
                 x: 0;
-                text: root.relay;
+                text: State.connected-to-hostname;
                 color: #aaaaaa; // TODO: use the right value
 
             }
@@ -108,7 +127,6 @@ component DashboardHeader {
 
 export component Dashboard {
     in-out property <length> anchor_y: 0px;
-    callback on_switch_location <=> location_button.clicked;
     callback on_connect <=> cb.clicked;
 
     Rectangle {
@@ -128,35 +146,13 @@ export component Dashboard {
 
             FeatureIndicators { }
 
-            location_button := LocationButton { }
+            location_button := LocationButton {
+                clicked => { Route.select-location.show = true; }
+            }
 
             cb := ConnectButton {
-                // Mock the connected/disconnected state
                 clicked => {
-                    if Connection.is-connected {
-                        Connection.state = ConnectionState.disconnecting;
-                    } else if Connection.is-disconnecting {
-                        Connection.state = ConnectionState.error;
-                    } else if Connection.is-error {
-                        Connection.state = ConnectionState.disconnected;
-                    } else if Connection.is-disconnected {
-                        Connection.state = ConnectionState.connecting;
-                    } else {
-                        Connection.state = ConnectionState.connected;
-                    }
-                    if Connection.is-secure {
-                        self.text = "Disconnect";
-                    } else {
-                        self.text = "Connect";
-                    }
-
-                    if Connection.is-connected || Connection.is-connecting {
-                        header.relay = "se-got-wg-001";
-                        header.location = "Sweden, Gothenburg";
-                    } else {
-                        header.relay = "";
-                        header.location = "Sweden";
-                    }
+                    State.connect-button();
                 }
             }
         }

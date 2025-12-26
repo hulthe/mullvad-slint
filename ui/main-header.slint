@@ -1,9 +1,10 @@
-
-import { Connection } from "connection.slint";
+import { State } from "state.slint";
 import { MullvadPalette } from "palette.slint";
+import { Route } from "route.slint";
+
 export component MainHeader inherits Rectangle {
     height: 80px;
-    background: Connection.is-secure ? MullvadPalette.connected_green : MullvadPalette.disconnected_red;
+    background: State.is-secure ? MullvadPalette.connected_green : MullvadPalette.disconnected_red;
     animate background {
         easing: linear;
         duration: 0.25s;
@@ -30,7 +31,7 @@ export component MainHeader inherits Rectangle {
     Image {
         source: @image-url("./images/icon-account-circle.svg");
         height: 23px;
-        x: 240px;
+        x: root.width - 80px;
         y: 24px;
         opacity: touch_a.has-hover ? 1.0 : 0.6;
         touch_a := TouchArea { }
@@ -39,9 +40,13 @@ export component MainHeader inherits Rectangle {
     Image {
         source: @image-url("./images/icon-settings-filled.svg");
         height: 23px;
-        x: 280px;
+        x: root.width - 40px;
         y: 24px;
         opacity: touch_b.has-hover ? 1.0 : 0.6;
-        touch_b := TouchArea { }
+        touch_b := TouchArea {
+            clicked => {
+                Route.settings.show = true;
+            }
+        }
     }
 }

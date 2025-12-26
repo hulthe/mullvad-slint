@@ -1,0 +1,74 @@
+export enum ConnectionState {
+    disconnected,
+    disconnecting,
+    connecting,
+    connected,
+    error,
+}
+
+export global State {
+    in-out property <ConnectionState> conn;
+
+    out property <bool> is-disconnected: self.conn == ConnectionState.disconnected;
+    out property <bool> is-disconnecting: self.conn == ConnectionState.disconnecting;
+    out property <bool> is-connected: self.conn == ConnectionState.connected;
+    out property <bool> is-connecting: self.conn == ConnectionState.connecting;
+    out property <bool> is-error: self.conn == ConnectionState.error;
+    out property <bool> is-secure: self.conn != ConnectionState.disconnected && self.conn != ConnectionState.disconnecting;
+
+    callback connect-button();
+    connect-button() => {
+        // Mock the connected/disconnected state
+        if State.is-connected {
+            State.conn = ConnectionState.disconnecting;
+        } else if State.is-disconnecting {
+            State.conn = ConnectionState.error;
+        } else if State.is-error {
+            State.conn = ConnectionState.disconnected;
+        } else if State.is-disconnected {
+            State.conn = ConnectionState.connecting;
+        } else {
+            State.conn = ConnectionState.connected;
+        }
+        // if State.is-secure {
+        //     self.text = "Disconnect";
+        // } else {
+        //     self.text = "Connect";
+        // }
+
+        if State.is-connected || State.is-connecting {
+            connected-to-hostname = "se-got-wg-001";
+            connected-to-location = "Sweden, Gothenburg";
+        } else {
+            connected-to-hostname = "";
+            connected-to-location = "Sweden";
+        }
+    }
+
+    in-out property <string> connected-to-location: "Sweden";
+    in-out property <string> connected-to-hostname: "";
+
+    in-out property <bool> allow-lan: false;
+    callback set-allow-lan(bool);
+    set-allow-lan(enabled) => {
+        allow-lan = enabled;
+    }
+
+    in-out property <bool> enable-ipv6: false;
+    callback set-enable-ipv6(bool);
+    set-enable-ipv6(enabled) => {
+        enable-ipv6 = enabled;
+    }
+
+    in-out property <bool> daita-enabled: false;
+    callback set-daita-enabled(bool);
+    set-daita-enabled(enabled) => {
+        daita-enabled = enabled;
+    }
+
+    in-out property <bool> daita-direct-only: false;
+    callback set-daita-direct-only(bool);
+    set-daita-direct-only(enabled) => {
+        daita-direct-only = enabled;
+    }
+}

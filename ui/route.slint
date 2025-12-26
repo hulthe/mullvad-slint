@@ -1,0 +1,12 @@
+export struct View {
+    show: bool,
+}
+
+export global Route {
+    in-out property <View> settings: { show: false };
+    in-out property <View> daita: { show: false };
+    in-out property <View> multihop: { show: false };
+    in-out property <View> vpn-settings: { show: false };
+    in-out property <View> anti-censorship: { show: false };
+    in-out property <View> select-location: { show: true };
+}
