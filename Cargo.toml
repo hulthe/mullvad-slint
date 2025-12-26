@@ -31,7 +31,8 @@ features = [
 	"compat-1-2",
 	"accessibility",
 	"backend-winit",
-	"renderer-skia-opengl",
+	# "renderer-skia-opengl",
+	"renderer-femtovg",
 	"live-preview",
 ]
 
