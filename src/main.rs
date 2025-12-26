@@ -13,12 +13,16 @@ mod my_slint {
 
 use std::{collections::BTreeMap, rc::Rc, sync::LazyLock};
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use futures::StreamExt as _;
 use mullvad_management_interface::client::DaemonEvent;
-use mullvad_types::states::TunnelState;
+use mullvad_types::{
+    constraints::Constraint,
+    relay_constraints::{GeographicLocationConstraint, LocationConstraint, RelaySettings},
+    states::TunnelState,
+};
 use my_slint::Country;
-use slint::{ComponentHandle as _, ModelRc, VecModel};
+use slint::{ComponentHandle as _, ModelRc, ToSharedString, VecModel};
 
 use crate::{my_slint::ConnectionState, rpc::Rpc, tray::create_tray_icon};
 
@@ -26,14 +30,21 @@ use crate::{my_slint::ConnectionState, rpc::Rpc, tray::create_tray_icon};
 // A [ModelRc] is just a Slint list.
 fn relay_list_to_slint(relay_list: &api::RelayList) -> ModelRc<Country> {
     // Transform the relay list into a tree of Country/City/Relay.
-    let mut countries: BTreeMap<String, BTreeMap<String, Vec<my_slint::Relay>>> = BTreeMap::new();
+    let mut countries: BTreeMap<(&str, &str), BTreeMap<(&str, &str), Vec<my_slint::Relay>>> =
+        BTreeMap::new();
     for relay in &relay_list.wireguard.relays {
         let Some(location) = relay_list.locations.get(&relay.location) else {
             continue;
         };
 
-        let country = countries.entry(location.country.clone()).or_default();
-        let city = country.entry(location.city.clone()).or_default();
+        let (country_code, city_code) = relay
+            .location
+            .split_once('-')
+            .expect("country and city code");
+        let country = countries
+            .entry((&country_code, &location.country))
+            .or_default();
+        let city = country.entry((city_code, &location.city)).or_default();
         city.push(my_slint::Relay {
             hostname: relay.hostname.clone().into(),
         });
@@ -43,17 +54,19 @@ fn relay_list_to_slint(relay_list: &api::RelayList) -> ModelRc<Country> {
     // Slint does not support Maps AFAICT.
     let countries = countries
         .into_iter()
-        .map(|(name, cities)| {
+        .map(|((code, name), cities)| {
             let cities = cities
                 .into_iter()
-                .map(|(name, relays)| my_slint::City {
+                .map(|((code, name), relays)| my_slint::City {
                     name: name.into(),
+                    code: code.into(),
                     relays: relays.as_slice().into(),
                 })
                 .collect::<VecModel<my_slint::City>>();
 
             my_slint::Country {
                 name: name.into(),
+                code: code.into(),
                 cities: ModelRc::from(Rc::new(cities)),
             }
         })
@@ -103,6 +116,31 @@ fn main() -> anyhow::Result<()> {
         });
     }
 
+    {
+        let rpc = rpc.clone();
+        let app_weak = app.as_weak();
+        ui_state.on_select_country(move |country| {
+            let app_weak = app_weak.clone();
+            rpc.invoke(|mut rpc| async move {
+                let relay_settings = rpc.get_settings().await?.relay_settings;
+                let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
+                    bail!("Can't configure custom relays");
+                };
+                relay_constraints.location = Constraint::Only(LocationConstraint::Location(
+                    GeographicLocationConstraint::Country(country.code.into()),
+                ));
+                rpc.set_relay_settings(RelaySettings::Normal(relay_constraints))
+                    .await?;
+                app_weak.upgrade_in_event_loop(move |app| {
+                    let ui_state = app.global::<my_slint::State>();
+                    ui_state.set_selected_country(country.name);
+                })?;
+
+                Ok(())
+            });
+        });
+    }
+
     macro_rules! bind_boolean_rpc {
         ($ui_callback:ident, $rpc_fn:ident) => {{
             let rpc = rpc.clone();
@@ -143,6 +181,7 @@ fn main() -> anyhow::Result<()> {
             .unwrap();
 
         let update_state = |tunnel_state: &TunnelState| {
+            let location = tunnel_state.get_location();
             let conn_state = match tunnel_state {
                 TunnelState::Disconnected { .. } => ConnectionState::Disconnected,
                 TunnelState::Connecting { .. } => ConnectionState::Connecting,
@@ -151,8 +190,25 @@ fn main() -> anyhow::Result<()> {
                 TunnelState::Error(..) => ConnectionState::Error,
             };
 
+            let hostname = location
+                .and_then(|l| l.hostname.as_deref())
+                .unwrap_or_default()
+                .to_shared_string();
+
+            let country = location.map(|l| l.country.as_str()).unwrap_or_default();
+            let city = location.and_then(|l| l.city.as_deref());
+
+            let location = if let Some(city) = city {
+                format!("{country}, {city}").to_shared_string()
+            } else {
+                country.to_shared_string()
+            };
+
             app_weak.upgrade_in_event_loop(move |app| {
-                app.global::<my_slint::State>().set_conn(conn_state);
+                let state = app.global::<my_slint::State>();
+                state.set_conn(conn_state);
+                state.set_connected_to_location(location);
+                state.set_connected_to_hostname(hostname);
             })
         };
 

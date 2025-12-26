@@ -4,11 +4,13 @@ export struct Relay {
 
 export struct City {
     name: string,
+    code: string,
     relays: [Relay],
 }
 
 export struct Country {
     name: string,
+    code: string,
     cities: [City],
 }
 

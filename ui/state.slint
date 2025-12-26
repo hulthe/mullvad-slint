@@ -1,3 +1,5 @@
+import { Country, City } from "relay-list.slint";
+
 export enum ConnectionState {
     disconnected,
     disconnecting,
@@ -39,6 +41,18 @@ export global State {
             connected-to-location = "Sweden";
         }
     }
+
+    in-out property <string> selected-country: "Albania";
+    callback select-country(Country);
+    select-country(country) => { selected-country = country.name; }
+
+    in-out property <string> selected-city: "";
+    callback select-city(City);
+    select-city(city) => { selected-city = city.name; }
+
+    in-out property <string> selected-hostname: "";
+    callback select-hostname(string);
+    select-hostname(hostname) => { selected-hostname = hostname; }
 
     in-out property <string> connected-to-location: "Sweden";
     in-out property <string> connected-to-hostname: "";
