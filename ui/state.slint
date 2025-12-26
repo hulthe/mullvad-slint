@@ -30,11 +30,6 @@ export global State {
         } else {
             State.conn = ConnectionState.connected;
         }
-        // if State.is-secure {
-        //     self.text = "Disconnect";
-        // } else {
-        //     self.text = "Connect";
-        // }
 
         if State.is-connected || State.is-connecting {
             connected-to-hostname = "se-got-wg-001";
