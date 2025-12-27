@@ -11,7 +11,7 @@ mod my_slint {
     impl Eq for Relay {}
 }
 
-use std::{collections::BTreeMap, rc::Rc, sync::LazyLock};
+use std::{rc::Rc, sync::LazyLock};
 
 use anyhow::{Context, bail};
 use futures::StreamExt as _;
@@ -19,6 +19,7 @@ use mullvad_management_interface::client::DaemonEvent;
 use mullvad_types::{
     constraints::Constraint,
     relay_constraints::{GeographicLocationConstraint, LocationConstraint, RelaySettings},
+    relay_list::RelayList,
     states::TunnelState,
 };
 use my_slint::Country;
@@ -26,56 +27,41 @@ use slint::{ComponentHandle as _, ModelRc, ToSharedString, VecModel};
 
 use crate::{my_slint::ConnectionState, rpc::Rpc, tray::create_tray_icon};
 
-// Convert API relay list from Rust to a Slint list of countries.
-// A [ModelRc] is just a Slint list.
-fn relay_list_to_slint(relay_list: &api::RelayList) -> ModelRc<Country> {
-    // Transform the relay list into a tree of Country/City/Relay.
-    let mut countries: BTreeMap<(&str, &str), BTreeMap<(&str, &str), Vec<my_slint::Relay>>> =
-        BTreeMap::new();
-    for relay in &relay_list.wireguard.relays {
-        let Some(location) = relay_list.locations.get(&relay.location) else {
-            continue;
-        };
-
-        let (country_code, city_code) = relay
-            .location
-            .split_once('-')
-            .expect("country and city code");
-        let country = countries
-            .entry((&country_code, &location.country))
-            .or_default();
-        let city = country.entry((city_code, &location.city)).or_default();
-        city.push(my_slint::Relay {
-            hostname: relay.hostname.clone().into(),
-        });
-    }
-
-    // Massage the rust BTreeMaps into a slint lists.
-    // Slint does not support Maps AFAICT.
-    let countries = countries
-        .into_iter()
-        .map(|((code, name), cities)| {
-            let cities = cities
-                .into_iter()
-                .map(|((code, name), relays)| my_slint::City {
-                    name: name.into(),
-                    code: code.into(),
-                    relays: relays.as_slice().into(),
+/// Convert gRPC relay list from Rust to a Slint list of countries.
+fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
+    let countries = relay_list
+        .countries
+        .iter()
+        .map(|country| {
+            let cities = country
+                .cities
+                .iter()
+                .map(|city| {
+                    let relays = city
+                        .relays
+                        .iter()
+                        .map(|relay| my_slint::Relay {
+                            hostname: relay.hostname.to_shared_string(),
+                        })
+                        .collect::<VecModel<_>>();
+                    my_slint::City {
+                        name: city.name.to_shared_string(),
+                        code: city.code.to_shared_string(),
+                        relays: ModelRc::from(Rc::new(relays)),
+                    }
                 })
-                .collect::<VecModel<my_slint::City>>();
+                .collect::<VecModel<_>>();
 
             my_slint::Country {
-                name: name.into(),
-                code: code.into(),
+                name: country.name.to_shared_string(),
+                code: country.code.to_shared_string(),
                 cities: ModelRc::from(Rc::new(cities)),
             }
         })
-        .collect::<VecModel<Country>>();
+        .collect::<VecModel<_>>();
 
     ModelRc::from(Rc::new(countries))
 }
-
-const RELAY_LIST: &str = include_str!("relays.json");
 
 static RT: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
     tokio::runtime::Builder::new_multi_thread()
@@ -85,20 +71,13 @@ static RT: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
 });
 
 fn main() -> anyhow::Result<()> {
-    let relay_list: api::RelayList =
-        serde_json::from_str(RELAY_LIST).expect("Failed to parse relay-list");
-
     let rpc = Rpc::new();
     let rpc2 = rpc.clone();
+    let rpc3 = rpc.clone();
 
     let _tray = create_tray_icon();
 
     let app = my_slint::AppWindow::new()?;
-
-    let countries = relay_list_to_slint(&relay_list);
-
-    app.global::<my_slint::RelayList>()
-        .set_countries(countries.clone());
 
     let ui_state = app.global::<my_slint::State>();
 
@@ -171,9 +150,23 @@ fn main() -> anyhow::Result<()> {
     bind_boolean_rpc!(on_set_daita_direct_only, set_daita_direct_only);
 
     let app_weak = app.as_weak();
-
     RT.spawn(async move {
         let rpc = rpc2;
+        let mut rpc = rpc.with_rpc(async |rpc| Ok(rpc.clone())).await.unwrap();
+        let relay_list = rpc
+            .get_relay_locations()
+            .await
+            .context("Failed to get relay list")?;
+        app_weak.upgrade_in_event_loop(move |app| {
+            let countries = relay_list_to_slint(&relay_list);
+            app.global::<my_slint::RelayList>().set_countries(countries);
+        })?;
+        anyhow::Ok(())
+    });
+
+    let app_weak = app.as_weak();
+    RT.spawn(async move {
+        let rpc = rpc3;
         let mut rpc = rpc.with_rpc(async |rpc| Ok(rpc.clone())).await.unwrap();
 
         let mut events = rpc
