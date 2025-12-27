@@ -17,7 +17,10 @@ impl Rpc {
         }
     }
 
-    /// Try to execute a function with MullvadProxyClient
+    /// Try to execute a function with a gRPC connection.
+    ///
+    /// # Errors
+    /// Returns `Err` if connecting to gRPC fails, or if `f` returns `Err`.
     pub async fn with_rpc<Fn, Fut, T>(&self, f: Fn) -> anyhow::Result<T>
     where
         Fn: FnOnce(OwnedMappedMutexGuard<Option<MullvadProxyClient>, MullvadProxyClient>) -> Fut,
@@ -25,6 +28,7 @@ impl Rpc {
     {
         let mut rpc_option = self.rpc.clone().lock_owned().await;
 
+        // Connect to gRPC if not already connected
         if rpc_option.is_none() {
             let rpc = MullvadProxyClient::new()
                 .await
@@ -33,13 +37,14 @@ impl Rpc {
         };
 
         let rpc = OwnedMutexGuard::map(rpc_option, |option: &mut Option<_>| {
-            option.as_mut().unwrap()
+            option.as_mut().expect("We have a gRPC connection")
         });
 
         f(rpc).await
     }
 
-    pub fn invoke<Fn, Fut>(&self, f: Fn)
+    /// Shorthand for spawning a tokio task and executing [`Self::with_rpc`].
+    pub fn spawn_with_rpc<Fn, Fut>(&self, f: Fn)
     where
         Fn: FnOnce(OwnedMappedMutexGuard<Option<MullvadProxyClient>, MullvadProxyClient>) -> Fut,
         Fut: Future<Output = anyhow::Result<()>>,

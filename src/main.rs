@@ -67,13 +67,11 @@ static RT: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .unwrap()
+        .expect("Failed to create tokio runtime")
 });
 
 fn main() -> anyhow::Result<()> {
     let rpc = Rpc::new();
-    let rpc2 = rpc.clone();
-    let rpc3 = rpc.clone();
 
     let _tray = create_tray_icon();
 
@@ -84,7 +82,7 @@ fn main() -> anyhow::Result<()> {
     {
         let rpc = rpc.clone();
         ui_state.on_connect_button(move || {
-            rpc.invoke(|mut rpc| async move {
+            rpc.spawn_with_rpc(|mut rpc| async move {
                 if rpc.get_tunnel_state().await?.is_disconnected() {
                     rpc.connect_tunnel().await?;
                 } else {
@@ -98,7 +96,7 @@ fn main() -> anyhow::Result<()> {
     {
         let rpc = rpc.clone();
         ui_state.on_select_country(move |country| {
-            rpc.invoke(|mut rpc| async move {
+            rpc.spawn_with_rpc(|mut rpc| async move {
                 let relay_settings = rpc.get_settings().await?.relay_settings;
                 let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
                     bail!("Can't configure custom relays");
@@ -117,7 +115,7 @@ fn main() -> anyhow::Result<()> {
     {
         let rpc = rpc.clone();
         ui_state.on_select_city(move |country, city| {
-            rpc.invoke(|mut rpc| async move {
+            rpc.spawn_with_rpc(|mut rpc| async move {
                 let relay_settings = rpc.get_settings().await?.relay_settings;
                 let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
                     bail!("Can't configure custom relays");
@@ -135,7 +133,7 @@ fn main() -> anyhow::Result<()> {
     {
         let rpc = rpc.clone();
         ui_state.on_select_relay(move |country, city, relay| {
-            rpc.invoke(|mut rpc| async move {
+            rpc.spawn_with_rpc(|mut rpc| async move {
                 let relay_settings = rpc.get_settings().await?.relay_settings;
                 let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
                     bail!("Can't configure custom relays");
@@ -158,7 +156,7 @@ fn main() -> anyhow::Result<()> {
         ($ui_callback:ident, $rpc_fn:ident) => {{
             let rpc = rpc.clone();
             ui_state.$ui_callback(move |enabled| {
-                rpc.invoke(async move |mut rpc| {
+                rpc.spawn_with_rpc(async move |mut rpc| {
                     rpc.$rpc_fn(enabled).await?;
                     Ok(())
                 });
@@ -171,10 +169,9 @@ fn main() -> anyhow::Result<()> {
     bind_boolean_rpc!(on_set_daita_enabled, set_enable_daita);
     bind_boolean_rpc!(on_set_daita_direct_only, set_daita_direct_only);
 
+    // Populate relay list
     let app_weak = app.as_weak();
-    RT.spawn(async move {
-        let rpc = rpc2;
-        let mut rpc = rpc.with_rpc(async |rpc| Ok(rpc.clone())).await.unwrap();
+    rpc.spawn_with_rpc(async move |mut rpc| {
         let relay_list = rpc
             .get_relay_locations()
             .await
@@ -183,29 +180,25 @@ fn main() -> anyhow::Result<()> {
             let countries = relay_list_to_slint(&relay_list);
             app.global::<my_slint::RelayList>().set_countries(countries);
         })?;
+
         anyhow::Ok(())
     });
 
+    // Listen for events
     let app_weak = app.as_weak();
-    RT.spawn(async move {
-        let rpc = rpc3;
-        let mut rpc = rpc.with_rpc(async |rpc| Ok(rpc.clone())).await.unwrap();
-
+    rpc.spawn_with_rpc(async move |mut rpc| {
         let mut events = rpc
             .events_listen()
             .await
-            .context("Failed to listen to events")
-            .unwrap();
+            .context("Failed to listen to events")?;
         let mut tunnel_state = rpc
             .get_tunnel_state()
             .await
-            .context("Failed to query tunnel state")
-            .unwrap();
+            .context("Failed to query tunnel state")?;
         let mut settings = rpc
             .get_settings()
             .await
-            .context("Failed to query tunnel state")
-            .unwrap();
+            .context("Failed to query tunnel state")?;
 
         let update_state = |tunnel_state: &TunnelState| {
             let location = tunnel_state.get_location();
@@ -299,28 +292,24 @@ fn main() -> anyhow::Result<()> {
             })
         };
 
-        update_state(&tunnel_state).unwrap();
-        update_settings(&settings).unwrap();
+        update_state(&tunnel_state)?;
+        update_settings(&settings)?;
 
-        loop {
-            let event = events.next().await;
-            let Some(Ok(event)) = event else { break };
-            match event {
+        while let Some(event) = events.next().await {
+            match event? {
                 DaemonEvent::TunnelState(new) => {
                     tunnel_state = new;
-                    if update_state(&tunnel_state).is_err() {
-                        break;
-                    }
+                    update_state(&tunnel_state)?;
                 }
                 DaemonEvent::Settings(new) => {
                     settings = new;
-                    if update_settings(&settings).is_err() {
-                        break;
-                    }
+                    update_settings(&settings)?;
                 }
                 _ => continue,
             }
         }
+
+        Ok(())
     });
 
     app.run()?;
