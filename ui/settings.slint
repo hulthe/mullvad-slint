@@ -237,10 +237,10 @@ export component DaitaView inherits SettingsSubView {
         SettingsToggle {
             text: "Direct only";
             round-top: false;
-            // is-enabled <=> Settings.daita-enabled;
-            // changed(enabled) => {
-            //     Settings.set-daita-enabled(enabled)
-            // }
+            is-enabled <=> Settings.daita-direct-only;
+            changed(enabled) => {
+                Settings.set-daita-direct-only(enabled)
+            }
         }
     }
 }
