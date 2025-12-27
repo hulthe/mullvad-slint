@@ -44,11 +44,11 @@ export global State {
 
     in-out property <string> selected-country: "Albania";
     callback select-country(Country);
-    select-country(country) => { selected-country = country.name; }
+    select-country(country) => { selected-country = country.code; }
 
     in-out property <string> selected-city: "";
-    callback select-city(City);
-    select-city(city) => { selected-city = city.name; }
+    callback select-city(Country, City);
+    select-city(city) => { selected-city = city.code; }
 
     in-out property <string> selected-hostname: "";
     callback select-hostname(string);

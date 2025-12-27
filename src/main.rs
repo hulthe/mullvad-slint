@@ -118,9 +118,7 @@ fn main() -> anyhow::Result<()> {
 
     {
         let rpc = rpc.clone();
-        let app_weak = app.as_weak();
         ui_state.on_select_country(move |country| {
-            let app_weak = app_weak.clone();
             rpc.invoke(|mut rpc| async move {
                 let relay_settings = rpc.get_settings().await?.relay_settings;
                 let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
@@ -131,11 +129,25 @@ fn main() -> anyhow::Result<()> {
                 ));
                 rpc.set_relay_settings(RelaySettings::Normal(relay_constraints))
                     .await?;
-                app_weak.upgrade_in_event_loop(move |app| {
-                    let ui_state = app.global::<my_slint::State>();
-                    ui_state.set_selected_country(country.name);
-                })?;
 
+                Ok(())
+            });
+        });
+    }
+
+    {
+        let rpc = rpc.clone();
+        ui_state.on_select_city(move |country, city| {
+            rpc.invoke(|mut rpc| async move {
+                let relay_settings = rpc.get_settings().await?.relay_settings;
+                let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
+                    bail!("Can't configure custom relays");
+                };
+                relay_constraints.location = Constraint::Only(LocationConstraint::Location(
+                    GeographicLocationConstraint::City(country.code.into(), city.code.into()),
+                ));
+                rpc.set_relay_settings(RelaySettings::Normal(relay_constraints))
+                    .await?;
                 Ok(())
             });
         });
@@ -234,10 +246,13 @@ fn main() -> anyhow::Result<()> {
                     GeographicLocationConstraint::Country(country_code) => {
                         country = &country_code;
                     }
-                    GeographicLocationConstraint::City(.., city_code) => {
+                    GeographicLocationConstraint::City(country_code, city_code) => {
+                        country = &country_code;
                         city = &city_code;
                     }
-                    GeographicLocationConstraint::Hostname(.., hostname) => {
+                    GeographicLocationConstraint::Hostname(country_code, city_code, hostname) => {
+                        country = &country_code;
+                        city = &city_code;
                         relay = &hostname;
                     }
                 }

@@ -29,9 +29,10 @@ component SelectLocationSection inherits HorizontalLayout {
 }
 
 component CityButton inherits VerticalLayout {
+    in property <Country> country;
     in property <City> city;
     in property <bool> last-in-list: false;
-    out property <bool> selected: State.selected-city == city.code;
+    out property <bool> selected: State.selected-city == city.code && State.selected-hostname == "";
 
     HorizontalLayout {
         spacing: 2px;
@@ -56,7 +57,7 @@ component CityButton inherits VerticalLayout {
 
             title_touch := TouchArea {
                 clicked => {
-                    State.select-city(city);
+                    State.select-city(country, city);
                 }
             }
         }
@@ -77,15 +78,11 @@ component CityButton inherits VerticalLayout {
             fold_touch := TouchArea {}
         }
     }
-
-    // for city in country.cities: CityButton {
-    //     city: city;
-    // }
 }
 
 component CountryButton inherits VerticalLayout {
     in property <Country> country;
-    out property <bool> selected: State.selected-country == country.code;
+    out property <bool> selected: State.selected-country == country.code && State.selected-city == "";
     out property <bool> fold-out: false;
 
     HorizontalLayout {
@@ -140,6 +137,7 @@ component CountryButton inherits VerticalLayout {
 
     if fold-out: VerticalLayout {
         for city[i] in country.cities: CityButton {
+            country: country;
             city: city;
             last-in-list: (i + 1) == country.cities.length;
         }
