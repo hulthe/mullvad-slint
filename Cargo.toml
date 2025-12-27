@@ -3,6 +3,10 @@ name = "mullvad-slint"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+tray-icon = ["dep:tray-item"]
+
+
 [package.metadata.bundle]
 name = "Mullvad Slint"
 identifier = "mullvadvpn-app.mullvad.net"
@@ -16,7 +20,7 @@ image = { version = "0.25.8", default-features = false, features = ["png"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tokio = { version = "1.47.1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync"] }
-tray-item = { version = "0.10.0", features = ["ksni"] }
+tray-item = { version = "0.10.0", features = ["ksni"], optional = true }
 
 [dependencies.mullvad-management-interface]
 git = "https://github.com/mullvad/mullvadvpn-app.git"

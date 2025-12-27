@@ -3,6 +3,8 @@
 
 pub mod api;
 mod rpc;
+
+#[cfg(feature = "tray-icon")]
 mod tray;
 
 mod my_slint {
@@ -25,7 +27,7 @@ use mullvad_types::{
 use my_slint::Country;
 use slint::{ComponentHandle as _, ModelRc, ToSharedString, VecModel};
 
-use crate::{my_slint::ConnectionState, rpc::Rpc, tray::create_tray_icon};
+use crate::{my_slint::ConnectionState, rpc::Rpc};
 
 /// Convert gRPC relay list from Rust to a Slint list of countries.
 fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
@@ -73,7 +75,8 @@ static RT: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
 fn main() -> anyhow::Result<()> {
     let rpc = Rpc::new();
 
-    let _tray = create_tray_icon();
+    #[cfg(feature = "tray-icon")]
+    let _tray = tray::create_tray_icon();
 
     let app = my_slint::AppWindow::new()?;
 
