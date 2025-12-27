@@ -207,15 +207,55 @@ fn main() -> anyhow::Result<()> {
             app_weak.upgrade_in_event_loop(move |app| {
                 let state = app.global::<my_slint::State>();
                 state.set_conn(conn_state);
-                state.set_connected_to_location(location);
-                state.set_connected_to_hostname(hostname);
+                state.set_location(location);
+                state.set_relay_hostname(hostname);
             })
+        };
+
+        let update_selected_relay = |ui_state: &my_slint::State, relay_settings: &RelaySettings| {
+            let mut country = "";
+            let mut city = "";
+            let mut relay = "";
+
+            loop {
+                let RelaySettings::Normal(relay_constraints) = relay_settings else {
+                    break;
+                };
+
+                let Constraint::Only(location) = &relay_constraints.location else {
+                    break;
+                };
+
+                let LocationConstraint::Location(location) = location else {
+                    break; // TODO: custom list
+                };
+
+                match location {
+                    GeographicLocationConstraint::Country(country_code) => {
+                        country = &country_code;
+                    }
+                    GeographicLocationConstraint::City(.., city_code) => {
+                        city = &city_code;
+                    }
+                    GeographicLocationConstraint::Hostname(.., hostname) => {
+                        relay = &hostname;
+                    }
+                }
+
+                break;
+            }
+
+            ui_state.set_selected_country(country.into());
+            ui_state.set_selected_city(city.into());
+            ui_state.set_selected_hostname(relay.into());
         };
 
         let update_settings = |settings: &mullvad_types::settings::Settings| {
             let settings = settings.clone();
             app_weak.upgrade_in_event_loop(move |app| {
                 let ui_state = app.global::<my_slint::State>();
+
+                update_selected_relay(&ui_state, &settings.relay_settings);
                 ui_state.set_allow_lan(settings.allow_lan);
                 ui_state.set_enable_ipv6(settings.tunnel_options.generic.enable_ipv6);
                 ui_state.set_daita_enabled(settings.tunnel_options.wireguard.daita.enabled);

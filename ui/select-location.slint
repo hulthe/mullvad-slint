@@ -1,7 +1,7 @@
 
 import { HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
 import { MullvadPalette } from "palette.slint";
-import { RelayList, Country } from "relay-list.slint";
+import { RelayList, Country, City } from "relay-list.slint";
 import { Route } from "route.slint";
 import { State } from "state.slint";
 
@@ -28,53 +28,121 @@ component SelectLocationSection inherits HorizontalLayout {
     }
 }
 
-component CountryButton inherits HorizontalLayout {
+component CityButton inherits VerticalLayout {
+    in property <City> city;
+    in property <bool> last-in-list: false;
+    out property <bool> selected: State.selected-city == city.code;
+
+    HorizontalLayout {
+        spacing: 2px;
+
+        Rectangle {
+            background: title_touch.pressed ? MullvadPalette.lightest_blue : title_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.dim_blue;
+            height: 48px;
+            border-bottom-left-radius: last-in-list ? 16px : 0;
+
+            if selected : Image {
+                x: 12px;
+                source: @image-url("./images/icon-checkmark.svg");
+                colorize: MullvadPalette.connected_green;
+            }
+
+            Text {
+                text: city.name;
+                color: selected ? MullvadPalette.connected_green : white;
+                x: selected ? 48px : 12px;
+                font-size: 14px;
+            }
+
+            title_touch := TouchArea {
+                clicked => {
+                    State.select-city(city);
+                }
+            }
+        }
+
+        Rectangle {
+            background: fold_touch.pressed ? MullvadPalette.lightest_blue : fold_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.dim_blue;
+            height: 48px;
+            width: 48px;
+            border-bottom-right-radius: last-in-list ? 16px : 0;
+
+            Image {
+                x: parent.width - self.width - 10px;
+                height: 30px;
+                opacity: 0.7;
+                source: @image-url("./images/icon-chevron-down.svg");
+            }
+
+            fold_touch := TouchArea {}
+        }
+    }
+
+    // for city in country.cities: CityButton {
+    //     city: city;
+    // }
+}
+
+component CountryButton inherits VerticalLayout {
     in property <Country> country;
-    out property <bool> selected: State.selected-country == country.name;
+    out property <bool> selected: State.selected-country == country.code;
+    out property <bool> fold-out: false;
 
-    spacing: 2px;
+    HorizontalLayout {
+        spacing: 2px;
 
-    Rectangle {
-        background: title_touch.pressed ? MullvadPalette.lightest_blue : title_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.light_blue;
-        height: 48px;
-        border-top-left-radius: 16px;
-        border-bottom-left-radius: 16px;
+        Rectangle {
+            background: title_touch.pressed ? MullvadPalette.lightest_blue : title_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.light_blue;
+            height: 48px;
+            border-top-left-radius: 16px;
+            border-bottom-left-radius: fold-out ? 0 : 16px;
 
-        if selected : Image {
-            x: 12px;
-            source: @image-url("./images/icon-checkmark.svg");
-            colorize: MullvadPalette.connected_green;
+            if selected : Image {
+                x: 12px;
+                source: @image-url("./images/icon-checkmark.svg");
+                colorize: MullvadPalette.connected_green;
+            }
+
+            Text {
+                text: country.name;
+                color: selected ? MullvadPalette.connected_green : white;
+                x: selected ? 48px : 12px;
+                font-size: 14px;
+            }
+
+            title_touch := TouchArea {
+                clicked => {
+                    State.select-country(country);
+                }
+            }
         }
 
-        Text {
-            text: country.name;
-            color: selected ? MullvadPalette.connected_green : white;
-            x: selected ? 48px : 12px;
-            font-size: 14px;
-        }
+        Rectangle {
+            background: fold_touch.pressed ? MullvadPalette.lightest_blue : fold_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.light_blue;
+            height: 48px;
+            width: 48px;
+            border-top-right-radius: 16px;
+            border-bottom-right-radius: fold-out ? 0 : 16px;
 
-        title_touch := TouchArea {
-            clicked => {
-                State.select-country(country);
+            Image {
+                x: parent.width - self.width - 10px;
+                height: 30px;
+                opacity: 0.7;
+                source: fold-out ? @image-url("./images/icon-chevron-up.svg")
+                                 : @image-url("./images/icon-chevron-down.svg");
+            }
+
+            fold_touch := TouchArea {
+                clicked => { fold-out = !fold-out; }
             }
         }
     }
 
-    Rectangle {
-        background: fold_touch.pressed ? MullvadPalette.lightest_blue : fold_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.light_blue;
-        height: 48px;
-        width: 48px;
-        border-top-right-radius: 16px;
-        border-bottom-right-radius: 16px;
-
-        Image {
-            x: parent.width - self.width - 10px;
-            height: 30px;
-            opacity: 0.7;
-            source: @image-url("./images/icon-chevron-down.svg");
+    if fold-out: VerticalLayout {
+        for city[i] in country.cities: CityButton {
+            city: city;
+            last-in-list: (i + 1) == country.cities.length;
         }
-
-        fold_touch := TouchArea {}
     }
 }
 
@@ -144,9 +212,9 @@ export component SelectLocationView inherits Rectangle {
         ScrollView {
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            VerticalBox {
+            VerticalLayout {
                 padding: 16px;
-                spacing: 2px;
+                spacing: 4px;
 
                 SelectLocationSection {
                     text: "Latest";

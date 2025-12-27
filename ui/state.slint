@@ -34,11 +34,11 @@ export global State {
         }
 
         if State.is-connected || State.is-connecting {
-            connected-to-hostname = "se-got-wg-001";
-            connected-to-location = "Sweden, Gothenburg";
+            relay-hostname = "se-got-wg-001";
+            location = "Sweden, Gothenburg";
         } else {
-            connected-to-hostname = "";
-            connected-to-location = "Sweden";
+            relay-hostname = "";
+            location = "Sweden";
         }
     }
 
@@ -54,8 +54,9 @@ export global State {
     callback select-hostname(string);
     select-hostname(hostname) => { selected-hostname = hostname; }
 
-    in-out property <string> connected-to-location: "Sweden";
-    in-out property <string> connected-to-hostname: "";
+    // The location & hostname shown on the dashboard
+    in-out property <string> location: "Sweden";
+    in-out property <string> relay-hostname: "";
 
     in-out property <bool> allow-lan: false;
     callback set-allow-lan(bool);

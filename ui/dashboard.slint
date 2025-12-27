@@ -101,7 +101,7 @@ component DashboardHeader {
         }
 
         location_txt := Text {
-            text: State.connected-to-location;
+            text: State.location;
             color: white;
             font-size: 12pt;
         }
@@ -109,7 +109,7 @@ component DashboardHeader {
         // Use a rectangle so we can clip the text when animating.
         Rectangle {
             clip: true;
-            height: State.connected-to-hostname.is-empty ? 0 : txt.height;
+            height: State.relay-hostname.is-empty ? 0 : txt.height;
             animate height {
                 easing: ease-out;
                 duration: 0.2s;
@@ -117,7 +117,7 @@ component DashboardHeader {
             txt := Text {
                 y: 0;
                 x: 0;
-                text: State.connected-to-hostname;
+                text: State.relay-hostname;
                 color: #aaaaaa; // TODO: use the right value
 
             }
