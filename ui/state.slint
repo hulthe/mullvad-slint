@@ -1,4 +1,4 @@
-import { Country, City } from "relay-list.slint";
+import { Country, City, Relay } from "relay-list.slint";
 
 export enum ConnectionState {
     disconnected,
@@ -48,11 +48,11 @@ export global State {
 
     in-out property <string> selected-city: "";
     callback select-city(Country, City);
-    select-city(city) => { selected-city = city.code; }
+    select-city(_country, city) => { selected-city = city.code; }
 
-    in-out property <string> selected-hostname: "";
-    callback select-hostname(string);
-    select-hostname(hostname) => { selected-hostname = hostname; }
+    in-out property <string> selected-relay: "";
+    callback select-relay(Country, City, Relay);
+    select-relay(_country, _city, relay) => { selected-relay = relay.hostname; }
 
     // The location & hostname shown on the dashboard
     in-out property <string> location: "Sweden";

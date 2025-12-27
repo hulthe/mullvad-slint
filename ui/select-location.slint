@@ -1,7 +1,7 @@
 
 import { HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
 import { MullvadPalette } from "palette.slint";
-import { RelayList, Country, City } from "relay-list.slint";
+import { RelayList, Country, City, Relay } from "relay-list.slint";
 import { Route } from "route.slint";
 import { State } from "state.slint";
 
@@ -28,11 +28,47 @@ component SelectLocationSection inherits HorizontalLayout {
     }
 }
 
+component RelayButton inherits VerticalLayout {
+    in property <Country> country;
+    in property <City> city;
+    in property <Relay> relay;
+    in property <bool> last-in-list: false;
+    out property <bool> selected: State.selected-relay == relay.hostname;
+
+    Rectangle {
+        background: title_touch.pressed ? MullvadPalette.lightest_blue : title_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.dimmer_blue;
+        height: 48px;
+        border-bottom-left-radius: last-in-list ? 16px : 0;
+        border-bottom-right-radius: last-in-list ? 16px : 0;
+
+        if selected : Image {
+            x: 12px;
+            source: @image-url("./images/icon-checkmark.svg");
+            colorize: MullvadPalette.connected_green;
+        }
+
+        Text {
+            text: relay.hostname;
+            color: selected ? MullvadPalette.connected_green : white;
+            x: selected ? 48px : 12px;
+            font-size: 14px;
+        }
+
+        title_touch := TouchArea {
+            clicked => {
+                State.select-relay(country, city, relay);
+            }
+        }
+    }
+}
+
 component CityButton inherits VerticalLayout {
     in property <Country> country;
     in property <City> city;
     in property <bool> last-in-list: false;
-    out property <bool> selected: State.selected-city == city.code && State.selected-hostname == "";
+    out property <bool> selected: State.selected-city == city.code && State.selected-relay == "";
+    out property <bool> fold-out: false;
+    out property <bool> round-bottom: !fold-out && last-in-list;
 
     HorizontalLayout {
         spacing: 2px;
@@ -40,7 +76,7 @@ component CityButton inherits VerticalLayout {
         Rectangle {
             background: title_touch.pressed ? MullvadPalette.lightest_blue : title_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.dim_blue;
             height: 48px;
-            border-bottom-left-radius: last-in-list ? 16px : 0;
+            border-bottom-left-radius: round-bottom ? 16px : 0;
 
             if selected : Image {
                 x: 12px;
@@ -66,16 +102,28 @@ component CityButton inherits VerticalLayout {
             background: fold_touch.pressed ? MullvadPalette.lightest_blue : fold_touch.has-hover ? MullvadPalette.lighter_blue : MullvadPalette.dim_blue;
             height: 48px;
             width: 48px;
-            border-bottom-right-radius: last-in-list ? 16px : 0;
+            border-bottom-right-radius: round-bottom ? 16px : 0;
 
             Image {
                 x: parent.width - self.width - 10px;
                 height: 30px;
                 opacity: 0.7;
-                source: @image-url("./images/icon-chevron-down.svg");
+                source: fold-out ? @image-url("./images/icon-chevron-up.svg")
+                                 : @image-url("./images/icon-chevron-down.svg");
             }
 
-            fold_touch := TouchArea {}
+            fold_touch := TouchArea {
+                clicked => { fold-out = !fold-out; }
+            }
+        }
+    }
+
+    if fold-out: VerticalLayout {
+        for relay[i] in city.relays: RelayButton {
+            country: country;
+            city: city;
+            relay: relay;
+            last-in-list: (i + 1) == city.relays.length;
         }
     }
 }

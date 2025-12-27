@@ -132,6 +132,28 @@ fn main() -> anyhow::Result<()> {
         });
     }
 
+    {
+        let rpc = rpc.clone();
+        ui_state.on_select_relay(move |country, city, relay| {
+            rpc.invoke(|mut rpc| async move {
+                let relay_settings = rpc.get_settings().await?.relay_settings;
+                let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
+                    bail!("Can't configure custom relays");
+                };
+                relay_constraints.location = Constraint::Only(LocationConstraint::Location(
+                    GeographicLocationConstraint::Hostname(
+                        country.code.into(),
+                        city.code.into(),
+                        relay.hostname.into(),
+                    ),
+                ));
+                rpc.set_relay_settings(RelaySettings::Normal(relay_constraints))
+                    .await?;
+                Ok(())
+            });
+        });
+    }
+
     macro_rules! bind_boolean_rpc {
         ($ui_callback:ident, $rpc_fn:ident) => {{
             let rpc = rpc.clone();
@@ -255,7 +277,7 @@ fn main() -> anyhow::Result<()> {
 
             ui_state.set_selected_country(country.into());
             ui_state.set_selected_city(city.into());
-            ui_state.set_selected_hostname(relay.into());
+            ui_state.set_selected_relay(relay.into());
         };
 
         let update_settings = |settings: &mullvad_types::settings::Settings| {
