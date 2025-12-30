@@ -3,15 +3,15 @@ name = "mullvad-slint"
 version = "0.1.0"
 edition = "2024"
 
-[features]
-tray-icon = ["dep:tray-item"]
-
-
 [package.metadata.bundle]
 name = "Mullvad Slint"
 identifier = "mullvadvpn-app.mullvad.net"
 short_description = "A minimal Mullvad VPN example, in Slint!"
 icon = ["./ui/images/icon.png"]
+
+[features]
+default = ["tray-icon"]
+tray-icon = ["dep:tray-item"]
 
 [dependencies]
 anyhow = "1.0.99"
