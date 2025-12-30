@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Mullvad VPN
+Exec=mullvad-slint %U
+Terminal=false
+Type=Application
+Icon=net.mullvad.MullvadSlint
+StartupWMClass=Mullvad VPN
+Comment=Now in Slint!
+Categories=Network;

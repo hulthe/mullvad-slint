@@ -1,0 +1,84 @@
+id: net.mullvad.MullvadSlint
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+
+command: 'mullvad-slint'
+
+modules:
+  - name: mullvad-slint
+    buildsystem: simple
+    sources:
+      # - type: script
+      #   dest-filename: gui
+      #   commands:
+      #     - echo "hello there"
+      - type: file
+        path: ./net.mullvad.MullvadSlint.desktop
+      - type: file
+        path: ./mullvad-slint
+
+        # fonts
+      - type: file
+        path: ../ui/fonts/NotoSansMyanmar-Bold.ttf
+      - type: file
+        path: ../ui/fonts/NotoSansThai-Bold.ttf
+      - type: file
+        path: ../ui/fonts/OpenSans-Bold.ttf
+      - type: file
+        path: ../ui/fonts/OpenSans-Regular.ttf
+      - type: file
+        path: ../ui/fonts/OpenSans-Semibold.ttf
+      - type: file
+        path: ../ui/fonts/SourceSansPro-Bold.ttf
+      - type: file
+        path: ../ui/fonts/SourceSansPro-SemiBold.ttf
+      # - type: file
+      #   path: ../images/icon.svg
+      # - type: file
+      #   path: ../images/icon_x512.png
+      # - type: file
+      #   path: ../images/icon_x192.png
+      # - type: file
+      #   path: ../images/icon_x144.png
+      # - type: file
+      #   path: ../images/icon_x128.png
+      # - type: file
+      #   path: ../images/icon_x72.png
+    build-commands:
+      - install -Dm755 mullvad-slint                    $FLATPAK_DEST/bin/mullvad-slint
+      - install -Dm644 net.mullvad.MullvadSlint.desktop $FLATPAK_DEST/share/applications/net.mullvad.MullvadSlint.desktop
+
+      # fonts
+      - install -Dm644 NotoSansMyanmar-Bold.ttf $FLATPAK_DEST/share/fonts/NotoSansMyanmar-Bold.ttf
+      - install -Dm644 NotoSansThai-Bold.ttf $FLATPAK_DEST/share/fonts/NotoSansThai-Bold.ttf
+      - install -Dm644 OpenSans-Bold.ttf $FLATPAK_DEST/share/fonts/OpenSans-Bold.ttf
+      - install -Dm644 OpenSans-Regular.ttf $FLATPAK_DEST/share/fonts/OpenSans-Regular.ttf
+      - install -Dm644 OpenSans-Semibold.ttf $FLATPAK_DEST/share/fonts/OpenSans-Semibold.ttf
+      - install -Dm644 SourceSansPro-Bold.ttf $FLATPAK_DEST/share/fonts/SourceSansPro-Bold.ttf
+      - install -Dm644 SourceSansPro-SemiBold.ttf $FLATPAK_DEST/share/fonts/SourceSansPro-SemiBold.ttf
+
+      # - install -Dm644 icon.svg       $FLATPAK_DEST/share/icons/hicolor/scalable/apps/sh.nubo.Inkopslista.svg
+      # - install -Dm644 icon_x512.png  $FLATPAK_DEST/share/icons/hicolor/512x512/apps/sh.nubo.Inkopslista.png
+      # - install -Dm644 icon_x192.png  $FLATPAK_DEST/share/icons/hicolor/192x192/apps/sh.nubo.Inkopslista.png
+      # - install -Dm644 icon_x144.png  $FLATPAK_DEST/share/icons/hicolor/144x144/apps/sh.nubo.Inkopslista.png
+      # - install -Dm644 icon_x128.png  $FLATPAK_DEST/share/icons/hicolor/128x128/apps/sh.nubo.Inkopslista.png
+      # - install -Dm644 icon_x72.png   $FLATPAK_DEST/share/icons/hicolor/72x72/apps/sh.nubo.Inkopslista.png
+
+finish-args:
+  # Wayland access
+  - --socket=wayland
+  # GPU acceleration if needed
+  - --device=dri
+  # Needs to talk to the network:
+  - --share=network
+  # Needs to save files locally
+  - --filesystem=xdg-documents
+  # Full dbus access
+  # TODO: limit this
+  - --socket=system-bus
+  # Mullvad gRPC socket
+  - --filesystem=/run/mullvad-vpn
+
+
+  
