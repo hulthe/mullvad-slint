@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod api;
+mod map;
 mod rpc;
 mod split_tunneling;
 
@@ -14,9 +15,10 @@ mod my_slint {
     impl Eq for Relay {}
 }
 
-use std::{rc::Rc, sync::LazyLock};
+use std::{rc::Rc, sync::LazyLock, time::Duration};
 
 use anyhow::{Context, bail};
+use dunge::block_on;
 use futures::StreamExt as _;
 use mullvad_management_interface::client::DaemonEvent;
 use mullvad_types::{
@@ -26,7 +28,7 @@ use mullvad_types::{
     states::TunnelState,
 };
 use my_slint::Country;
-use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
+use slint::{ComponentHandle as _, Model, ModelRc, PhysicalSize, ToSharedString, VecModel};
 
 use crate::{
     my_slint::{ConnectionState, SplitTunneling},
@@ -336,6 +338,56 @@ fn main() -> anyhow::Result<()> {
             st.set_filtered_app_list(ModelRc::new(Rc::new(filtered_app_list)));
         });
     });
+
+    // TODO
+    let app_weak = app.as_weak();
+    let mut size = PhysicalSize::new(0, 0);
+    let mut map = None;
+    app.window()
+        .set_rendering_notifier(move |state, _graphics| {
+            let slint::RenderingState::BeforeRendering = state else {
+                return;
+            };
+
+            let app = app_weak.upgrade().unwrap();
+            if app.window().size() == size {
+                return;
+            }
+            size = app.window().size();
+            if size.width == 0 || size.height == 0 {
+                return;
+            }
+
+            let map = map.get_or_insert_with(|| block_on(map::Map::new(size)).unwrap());
+            map.resize(size);
+
+            let image = block_on(map.render()).unwrap();
+            let image = slint::Image::from_rgba8(image);
+            app.global::<my_slint::State>().set_test_image(image);
+        })
+        .expect("Failed to set up rendering notifier");
+
+    // let size = app.window().size();
+    // let app_weak = app.as_weak();
+    // RT.spawn_blocking(move || {
+    //     block_on(async move {
+    //         let mut map = map::Map::new(size).await.unwrap();
+    //         loop {
+    //             let image = map.render().await.unwrap();
+
+    //             let event_loop = app_weak.upgrade_in_event_loop(move |app| {
+    //                 let image = slint::Image::from_rgba8(image);
+    //                 app.global::<my_slint::State>().set_test_image(image);
+    //             });
+
+    //             if event_loop.is_err() {
+    //                 break;
+    //             }
+
+    //             std::thread::sleep(Duration::from_millis(16));
+    //         }
+    //     })
+    // });
 
     app.run()?;
 

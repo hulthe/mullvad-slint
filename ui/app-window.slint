@@ -19,6 +19,12 @@ export component AppWindow inherits Window {
     background: MullvadPalette.dark_blue;
     default-font-family: "Source Sans Pro";
 
+    Image {
+        width: root.width;
+        height: root.height;
+        source: State.test-image;
+    }
+
     Router {
         width: root.width;
         height: root.height;
