@@ -1,4 +1,6 @@
 use std::{
+    ffi::OsStr,
+    fs,
     process::{Command, Stdio},
     rc::Rc,
 };
@@ -38,6 +40,11 @@ pub fn load_app_list(app_weak: Weak<AppWindow>) {
     RT.spawn_blocking(move || {
         let locales = &[];
 
+        enum ImageData {
+            Pixel(slint::SharedPixelBuffer<Rgba8Pixel>),
+            Svg(Vec<u8>),
+        }
+
         let mut entries: Vec<_> = freedesktop_desktop_entry::desktop_entries(locales)
             // TODO: consider processing each desktop entry in parallel
             .into_iter()
@@ -64,28 +71,33 @@ pub fn load_app_list(app_weak: Weak<AppWindow>) {
                         IconSource::Path(path) => Some(path),
                     })
                     .and_then(|path| {
-                        // TODO: `image` doesn't support SVGs
-                        image::open(path)
+                        let data = fs::read(&path).ok()?;
+                        if path.extension() == Some(OsStr::new("svg")) {
+                            return Some(ImageData::Svg(data));
+                        }
+
+                        image::load_from_memory(&data)
                             .inspect_err(|e| {
                                 eprintln!("Failed to load icon for {}: {e}", entry.appid);
                             })
+                            .map(|image| {
+                                let image = image
+                                    // Make sure we don't load huge icons into the GUI, as that may slow it down.
+                                    .resize(
+                                        u32::from(ICON_SIZE),
+                                        u32::from(ICON_SIZE),
+                                        image::imageops::FilterType::Triangle,
+                                    )
+                                    .into_rgba8();
+
+                                slint::SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+                                    image.as_raw(),
+                                    image.width(),
+                                    image.height(),
+                                )
+                            })
+                            .map(ImageData::Pixel)
                             .ok()
-                    })
-                    .map(|image| {
-                        // Make sure we don't load huge icons into the GUI, as that may slow it down.
-                        image.resize(
-                            u32::from(ICON_SIZE),
-                            u32::from(ICON_SIZE),
-                            image::imageops::FilterType::Triangle,
-                        )
-                    })
-                    .map(|image| image.into_rgba8())
-                    .map(|image| {
-                        slint::SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
-                            image.as_raw(),
-                            image.width(),
-                            image.height(),
-                        )
                     });
                 let show_warning = app_is_problematic(&entry);
                 (title, exec, icon, show_warning)
@@ -101,7 +113,11 @@ pub fn load_app_list(app_weak: Weak<AppWindow>) {
             let app_list = entries
                 .into_iter()
                 .map(|(title, exec, icon, show_warning)| {
-                    let icon = icon.map(slint::Image::from_rgba8);
+                    let icon = icon.and_then(|image| match image {
+                        ImageData::Pixel(buffer) => Some(slint::Image::from_rgba8(buffer)),
+                        // TODO: can svg decoding be done on another thread?
+                        ImageData::Svg(buffer) => slint::Image::load_from_svg_data(&buffer).ok(),
+                    });
 
                     let exec: VecModel<_> = exec.into_iter().map(SharedString::from).collect();
                     AppMeta {
