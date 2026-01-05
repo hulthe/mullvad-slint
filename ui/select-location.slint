@@ -4,29 +4,7 @@ import { MullvadPalette } from "palette.slint";
 import { RelayList, Country, City, Relay } from "relay-list.slint";
 import { Route } from "route.slint";
 import { State } from "state.slint";
-
-component SelectLocationSection inherits HorizontalLayout {
-    in property text <=> txt.text;
-
-    height: 24px;
-    spacing: 8px;
-
-    txt := Text {
-        text: "All locations";
-        color: white;
-        font-size: 14px;
-        font-weight: 600;
-    }
-
-    VerticalLayout {
-            height: parent.height;
-            alignment: center;
-        Rectangle {
-            height: 1px;
-            background: #fff4;
-        }
-    }
-}
+import { MenuSection } from "menu-section.slint";
 
 component RelayButton inherits VerticalLayout {
     in property <Country> country;
@@ -258,11 +236,13 @@ export component SelectLocationView inherits Rectangle {
         ScrollView {
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
+            mouse-drag-pan-enabled: true;
+
             VerticalLayout {
                 padding: 16px;
                 spacing: 4px;
 
-                SelectLocationSection {
+                MenuSection {
                     text: "Latest";
                 }
 
@@ -270,7 +250,7 @@ export component SelectLocationView inherits Rectangle {
                     height: 16px;
                 }
 
-                SelectLocationSection {
+                MenuSection {
                     text: "Custom lists";
                 }
 
@@ -278,7 +258,7 @@ export component SelectLocationView inherits Rectangle {
                     height: 16px;
                 }
 
-                SelectLocationSection {
+                MenuSection {
                     text: "All locations";
                 }
 

@@ -7,10 +7,15 @@ export { State }
 import { RelayList} from "relay-list.slint";
 export { RelayList }
 
+import { SplitTunneling } from "split-tunneling.slint";
+export { SplitTunneling }
+
 export component AppWindow inherits Window {
     title: "Mullvad VPN";
     preferred-width: 320px;
     preferred-height: 568px;
+    // width: self.preferred-width;
+    // height: self.preferred-height;
     background: MullvadPalette.dark_blue;
     default-font-family: "Source Sans Pro";
 

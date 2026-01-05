@@ -1,0 +1,112 @@
+import { ScrollView } from "std-widgets.slint";
+import { SettingsSubView, SettingsMenu, SettingsItem } from "settings.slint";
+import { Route } from "route.slint";
+import { MenuSection } from "menu-section.slint";
+
+export struct AppMeta {
+    title: string,
+    exec: [string],
+    icon: image,
+    show-warning: bool,
+}
+
+export global SplitTunneling {
+    in property<[AppMeta]> app_list: [
+        { title: "Test 1", icon: @image-url("./images/icon.svg")},
+        { title: "Test 2" },
+        { title: "Test 3", icon: @image-url("./images/icon.svg"), show-warning: true },
+    ];
+
+    in property<[AppMeta]> filtered_app_list: app_list;
+
+    callback search_apps(string);
+    callback launch_split_app(AppMeta);
+}
+
+component AppEntry inherits SettingsItem {
+    in property <AppMeta> meta;
+    clicked => {
+        debug("Launch split app:", meta.title);
+        SplitTunneling.launch_split_app(meta);
+    }
+
+    HorizontalLayout {
+        padding: 6px;
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 12px;
+        icon := Image {
+            horizontal-stretch: 0;
+            source: meta.icon;
+            height: parent.height - parent.padding * 2;
+            width: self.height;
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: meta.title;
+            vertical-alignment: center;
+            overflow: elide;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        if meta.show-warning: Image {
+            horizontal-stretch: 0;
+            source: @image-url("./images/icon-alert-circle.svg");
+            colorize: orange;
+            height: parent.height - parent.padding * 2;
+        }
+
+        Image {
+            horizontal-stretch: 0;
+            source: @image-url("./images/icon-chevron-right.svg");
+            height: parent.height - parent.padding * 2;
+        }
+    }
+}
+
+export component SplitTunnelingView inherits SettingsSubView {
+    title: "Split Tunneling";
+    on-exit => { Route.split-tunneling.show = false; }
+
+    HorizontalLayout {
+        padding-right: self.padding-left;
+        Rectangle {
+            height: 40px;
+            border-radius: 4px;
+            background: input.has-focus ? #fff : #fff2;
+            input := TextInput {
+                color: self.has-focus ? #000 : #fff9;
+                x: 40px;
+                vertical-alignment: center;
+                horizontal-alignment: left;
+                font-size: 15px;
+                edited() => SplitTunneling.search_apps(input.text);
+                accepted() => SplitTunneling.launch_split_app(SplitTunneling.filtered_app_list[0]);
+            }
+
+            Image {
+                x: 8px;
+                source: @image-url("./images/icon-search.svg");
+                height: 28px;
+                colorize: input.has-focus ? #000000 : #fffa;
+            }
+        }
+    }
+
+    MenuSection {
+        text: "All applications";
+    }
+
+    VerticalLayout {
+        spacing: 2px;
+        for app[i] in SplitTunneling.filtered_app_list: AppEntry {
+            meta: app;
+            round_top: i == 0;
+            round_bottom: i == SplitTunneling.filtered_app_list.length - 1;
+        }
+    }
+}
+

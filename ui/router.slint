@@ -2,11 +2,51 @@ import { Button } from "std-widgets.slint";
 import { MainView } from "main-view.slint";
 import { SettingsView, DaitaView, MultihopView, VpnSettingsView, AntiCensorshipView } from "settings.slint";
 import { SelectLocationView } from "select-location.slint";
+import { SplitTunnelingView } from "split-tunneling.slint";
 import { View, Route } from "route.slint";
 
 component RouterView {
+    // Whether we should show or hide the window
+    in property<bool> show: false;
+
+    // Where to place the window if show=false
+    in property<length> hide-at-x: 0px;
+    in property<length> hide-at-y: 0px;
+
+    // Animation duration
+    in property<duration> duration: 0.5s;
+
+    // TODO: hide @children behind if-statement once slint implements
+    // https://github.com/slint-ui/slint/issues/6354
+    visible: show || animation-timer.running;
+
+    x: hide-at-x;
+    y: hide-at-y;
+    width: 100%;
+    height: 100%;
+
+    // init() => {
+    //     self.x = show ? 0px : hide-at-x;
+    //     self.y = show ? 0px : hide-at-y;
+    // };
+
+    changed show => {
+        animation-timer.restart();
+        animation-timer.start();
+        self.x = show ? 0px : hide-at-x;
+        self.y = show ? 0px : hide-at-y;
+    }
+
+    animation_timer := Timer {
+        running: false;
+        interval: duration;
+        triggered() => {
+            animation-timer.stop();
+        };
+    }
+
     animate x, y {
-        duration: 0.5s;
+        duration: duration;
         easing: ease-in-out;
     }
 
@@ -15,71 +55,49 @@ component RouterView {
 
 export component Router {
     RouterView {
-        width: root.width;
-        height: root.height;
-        MainView {
-            width: root.width;
-            height: root.height;
-        }
+        show: true;
+        MainView {}
     }
 
     RouterView {
-        y: Route.settings.show ? 0px : root.height;
-        width: root.width;
-        height: root.height;
-        SettingsView {
-            width: root.width;
-            height: root.height;
-        }
+        show: Route.settings.show;
+        hide-at-y: root.height;
+        SettingsView {}
     }
 
     RouterView {
-        x: Route.daita.show ? 0px : root.width;
-        width: root.width;
-        height: root.height;
-        DaitaView {
-            width: root.width;
-            height: root.height;
-        }
+        show: Route.daita.show;
+        hide-at-x: root.width;
+        DaitaView {}
     }
 
     RouterView {
-        x: Route.multihop.show ? 0px : root.width;
-        width: root.width;
-        height: root.height;
-        MultihopView {
-            width: root.width;
-            height: root.height;
-        }
+        show: Route.multihop.show;
+        hide-at-x: root.width;
+        MultihopView {}
     }
 
     RouterView {
-        x: Route.vpn-settings.show ? 0px : root.width;
-        width: root.width;
-        height: root.height;
-        VpnSettingsView {
-            width: root.width;
-            height: root.height;
-        }
+        show: Route.vpn-settings.show;
+        hide-at-x: root.width;
+        VpnSettingsView {}
     }
 
     RouterView {
-        x: Route.anti-censorship.show ? 0px : root.width;
-        width: root.width;
-        height: root.height;
-        AntiCensorshipView {
-            width: root.width;
-            height: root.height;
-        }
+        show: Route.anti-censorship.show;
+        hide-at-x: root.width;
+        AntiCensorshipView {}
     }
 
     RouterView {
-        y: Route.select-location.show ? 0px : root.height;
-        width: root.width;
-        height: root.height;
-        SelectLocationView {
-            width: root.width;
-            height: root.height;
-        }
+        show: Route.split-tunneling.show; 
+        hide-at-x: root.width;
+        SplitTunnelingView {}
+    }
+
+    RouterView {
+        show: Route.select-location.show;
+        hide-at-y: root.height;
+        SelectLocationView {}
     }
 }

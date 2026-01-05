@@ -1,0 +1,23 @@
+export component MenuSection inherits HorizontalLayout {
+    in property text <=> txt.text;
+
+    height: 24px;
+    spacing: 8px;
+
+    txt := Text {
+        text: "All locations";
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    VerticalLayout {
+            height: parent.height;
+            alignment: center;
+        Rectangle {
+            height: 1px;
+            background: #fff4;
+        }
+    }
+}
+

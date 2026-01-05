@@ -3,6 +3,7 @@
 
 pub mod api;
 mod rpc;
+mod split_tunneling;
 
 #[cfg(feature = "tray-icon")]
 mod tray;
@@ -25,9 +26,12 @@ use mullvad_types::{
     states::TunnelState,
 };
 use my_slint::Country;
-use slint::{ComponentHandle as _, ModelRc, ToSharedString, VecModel};
+use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
 
-use crate::{my_slint::ConnectionState, rpc::Rpc};
+use crate::{
+    my_slint::{ConnectionState, SplitTunneling},
+    rpc::Rpc,
+};
 
 /// Convert gRPC relay list from Rust to a Slint list of countries.
 fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
@@ -313,6 +317,24 @@ fn main() -> anyhow::Result<()> {
         }
 
         Ok(())
+    });
+
+    // Populate app list
+    split_tunneling::load_app_list(app.as_weak());
+    let st = app.global::<SplitTunneling>();
+    st.on_launch_split_app(split_tunneling::launch_app);
+    let app_weak = app.as_weak();
+    st.on_search_apps(move |search| {
+        let search = search.to_lowercase();
+        let _ = app_weak.upgrade_in_event_loop(move |app| {
+            let st = app.global::<SplitTunneling>();
+            let app_list = st.get_app_list();
+            let filtered_app_list: VecModel<_> = app_list
+                .iter()
+                .filter(|meta| meta.title.to_lowercase().contains(search.as_str()))
+                .collect();
+            st.set_filtered_app_list(ModelRc::new(Rc::new(filtered_app_list)));
+        });
     });
 
     app.run()?;

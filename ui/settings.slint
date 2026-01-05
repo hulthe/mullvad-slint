@@ -55,7 +55,7 @@ component RedGreenToggle inherits Rectangle {
     
 }
 
-component SettingsItem inherits Rectangle {
+export component SettingsItem inherits Rectangle {
     in property <bool> round_top: true;
     in property <bool> round_bottom: true;
 
@@ -75,7 +75,7 @@ component SettingsItem inherits Rectangle {
     }
 }
 
-component SettingsMenu inherits SettingsItem {
+export component SettingsMenu inherits SettingsItem {
     in property <string> text: "";
 
     if text != "" : Text {
@@ -93,7 +93,7 @@ component SettingsMenu inherits SettingsItem {
     }
 }
 
-component SettingsToggle inherits SettingsItem {
+export component SettingsToggle inherits SettingsItem {
     in property <string> text: "";
     in-out property <bool> is_enabled: false;
     callback changed(bool);
@@ -124,7 +124,7 @@ component SettingsToggle inherits SettingsItem {
     }
 }
 
-component SettingsSelectable inherits SettingsItem {
+export component SettingsSelectable inherits SettingsItem {
     in property <string> text: "";
     in-out property <bool> selected: false;
     background: self.pressed   ? MullvadPalette.lightest_blue
@@ -147,7 +147,7 @@ component SettingsSelectable inherits SettingsItem {
     }
 }
 
-component SettingsSubView inherits Rectangle {
+export component SettingsSubView inherits Rectangle {
     background: MullvadPalette.dark_blue;
     in property <string> title: "Title";
     callback on-exit();
@@ -171,6 +171,7 @@ component SettingsSubView inherits Rectangle {
         ScrollView {
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
+            mouse-drag-pan-enabled: true;
 
             VerticalLayout {
                 alignment: start;
@@ -424,6 +425,7 @@ export component SettingsView inherits Rectangle {
         ScrollView {
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
+            mouse-drag-pan-enabled: true;
 
             VerticalLayout {
                 alignment: start;
@@ -454,6 +456,7 @@ export component SettingsView inherits Rectangle {
                 }
                 SettingsMenu {
                     text: "Split tunneling";
+                    clicked => { Route.split-tunneling.show = true; }
                 }
                 SettingsMenu {
                     text: "API access";
@@ -473,3 +476,4 @@ export component SettingsView inherits Rectangle {
         }
     }
 }
+
