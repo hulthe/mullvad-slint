@@ -3,32 +3,7 @@ import { HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
 import { MullvadPalette } from "palette.slint";
 import { RelayList, Country } from "relay-list.slint";
 import { Route } from "route.slint";
-
-export global Settings {
-    in-out property <bool> allow-lan: false;
-    callback set-allow-lan(bool);
-    set-allow-lan(enabled) => {
-        allow-lan = enabled;
-    }
-
-    in-out property <bool> enable-ipv6: false;
-    callback set-enable-ipv6(bool);
-    set-enable-ipv6(enabled) => {
-        enable-ipv6 = enabled;
-    }
-
-    in-out property <bool> daita-enabled: false;
-    callback set-daita-enabled(bool);
-    set-daita-enabled(enabled) => {
-        daita-enabled = enabled;
-    }
-
-    in-out property <bool> daita-direct-only: false;
-    callback set-daita-direct-only(bool);
-    set-daita-direct-only(enabled) => {
-        daita-direct-only = enabled;
-    }
-}
+import { State } from "state.slint";
 
 component RedGreenToggle inherits Rectangle {
     in-out property <bool> is_enabled: false;
@@ -229,18 +204,18 @@ export component DaitaView inherits SettingsSubView {
         SettingsToggle {
             text: "Enable";
             round-bottom: false;
-            is-enabled <=> Settings.daita-enabled;
+            is-enabled <=> State.daita-enabled;
             changed(enabled) => {
-                Settings.set-daita-enabled(enabled)
+                State.set-daita-enabled(enabled)
             }
         }
 
         SettingsToggle {
             text: "Direct only";
             round-top: false;
-            is-enabled <=> Settings.daita-direct-only;
+            is-enabled <=> State.daita-direct-only;
             changed(enabled) => {
-                Settings.set-daita-direct-only(enabled)
+                State.set-daita-direct-only(enabled)
             }
         }
     }
@@ -263,9 +238,9 @@ export component MultihopView inherits SettingsSubView {
 
     SettingsToggle {
         text: "Enable";
-        // is-enabled <=> Settings.multihop-enabled;
+        // is-enabled <=> State.multihop-enabled;
         // changed(enabled) => {
-        //     Settings.set-multhop-enabled(enabled)
+        //     State.set-multhop-enabled(enabled)
         // }
     }
 }
@@ -295,9 +270,9 @@ export component VpnSettingsView inherits SettingsSubView {
 
     SettingsToggle {
         text: "Local network sharing";
-        is-enabled <=> Settings.allow-lan;
+        is-enabled <=> State.allow-lan;
         changed(enabled) => {
-            Settings.set-allow-lan(enabled)
+            State.set-allow-lan(enabled)
         }
     }
 
@@ -317,9 +292,9 @@ export component VpnSettingsView inherits SettingsSubView {
 
     SettingsToggle {
         text: "In-tunnel IPv6";
-        is-enabled <=> Settings.enable-ipv6;
+        is-enabled <=> State.enable-ipv6;
         changed(enabled) => {
-            Settings.set-enable-ipv6(enabled)
+            State.set-enable-ipv6(enabled)
         }
     }
 
