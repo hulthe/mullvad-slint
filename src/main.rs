@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod api;
+#[cfg(feature = "map")]
 mod map;
 mod rpc;
 mod split_tunneling;
@@ -15,10 +16,9 @@ mod my_slint {
     impl Eq for Relay {}
 }
 
-use std::{rc::Rc, sync::LazyLock, time::Duration};
+use std::{rc::Rc, sync::LazyLock};
 
 use anyhow::{Context, bail};
-use dunge::block_on;
 use futures::StreamExt as _;
 use mullvad_management_interface::client::DaemonEvent;
 use mullvad_types::{
@@ -28,7 +28,7 @@ use mullvad_types::{
     states::TunnelState,
 };
 use my_slint::Country;
-use slint::{ComponentHandle as _, Model, ModelRc, PhysicalSize, ToSharedString, VecModel};
+use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
 
 use crate::{
     my_slint::{ConnectionState, SplitTunneling},
@@ -56,6 +56,8 @@ fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
                         name: city.name.to_shared_string(),
                         code: city.code.to_shared_string(),
                         relays: ModelRc::from(Rc::new(relays)),
+                        latitude: city.latitude as f32,
+                        longitude: city.longitude as f32,
                     }
                 })
                 .collect::<VecModel<_>>();
@@ -209,7 +211,8 @@ fn main() -> anyhow::Result<()> {
             .await
             .context("Failed to query tunnel state")?;
 
-        let update_state = |tunnel_state: &TunnelState| {
+        let mut last_latlong = (0.0, 0.0);
+        let mut update_state = |tunnel_state: &TunnelState| {
             let location = tunnel_state.get_location();
             let conn_state = match tunnel_state {
                 TunnelState::Disconnected { .. } => ConnectionState::Disconnected,
@@ -227,6 +230,17 @@ fn main() -> anyhow::Result<()> {
             let country = location.map(|l| l.country.as_str()).unwrap_or_default();
             let city = location.and_then(|l| l.city.as_deref());
 
+            let latlong = location
+                .map(|l| (l.latitude as f32, l.longitude as f32))
+                .filter(|&new| {
+                    if new != last_latlong {
+                        last_latlong = new;
+                        true
+                    } else {
+                        false
+                    }
+                });
+
             let location = if let Some(city) = city {
                 format!("{country}, {city}").to_shared_string()
             } else {
@@ -234,6 +248,10 @@ fn main() -> anyhow::Result<()> {
             };
 
             app_weak.upgrade_in_event_loop(move |app| {
+                if let Some((latitude, longitude)) = latlong {
+                    app.set_latitude(latitude);
+                    app.set_longitude(longitude);
+                }
                 let state = app.global::<my_slint::State>();
                 state.set_conn(conn_state);
                 state.set_location(location);
@@ -339,55 +357,48 @@ fn main() -> anyhow::Result<()> {
         });
     });
 
-    // TODO
-    let app_weak = app.as_weak();
-    let mut size = PhysicalSize::new(0, 0);
-    let mut map = None;
-    app.window()
-        .set_rendering_notifier(move |state, _graphics| {
-            let slint::RenderingState::BeforeRendering = state else {
-                return;
-            };
+    #[cfg(feature = "map")]
+    {
+        let app_weak = app.as_weak();
+        let mut size = slint::PhysicalSize::new(0, 0);
+        let mut map = None;
+        app.window()
+            .set_rendering_notifier(move |state, _graphics| {
+                // Draw the map before each render
+                let slint::RenderingState::BeforeRendering = state else {
+                    return;
+                };
 
-            let app = app_weak.upgrade().unwrap();
-            if app.window().size() == size {
-                return;
-            }
-            size = app.window().size();
-            if size.width == 0 || size.height == 0 {
-                return;
-            }
+                let app = app_weak.upgrade().unwrap();
 
-            let map = map.get_or_insert_with(|| block_on(map::Map::new(size)).unwrap());
-            map.resize(size);
+                // TODO: only re-render if inputs have changed, i.e.
+                // size, coords, or zoom
+                // if app.window().size() == size {
+                //     return;
+                // }
 
-            let image = block_on(map.render()).unwrap();
-            let image = slint::Image::from_rgba8(image);
-            app.global::<my_slint::State>().set_test_image(image);
-        })
-        .expect("Failed to set up rendering notifier");
+                size = app.window().size();
+                if size.width == 0 || size.height == 0 {
+                    return;
+                }
 
-    // let size = app.window().size();
-    // let app_weak = app.as_weak();
-    // RT.spawn_blocking(move || {
-    //     block_on(async move {
-    //         let mut map = map::Map::new(size).await.unwrap();
-    //         loop {
-    //             let image = map.render().await.unwrap();
+                let now = std::time::Instant::now();
 
-    //             let event_loop = app_weak.upgrade_in_event_loop(move |app| {
-    //                 let image = slint::Image::from_rgba8(image);
-    //                 app.global::<my_slint::State>().set_test_image(image);
-    //             });
+                let map = map.get_or_insert_with(|| dunge::block_on(map::Map::new(size)).unwrap());
+                map.resize(size).expect("size isn't 0");
+                map.coords.x = dbg!(app.get_latitude());
+                map.coords.y = dbg!(app.get_longitude());
+                map.zoom = dbg!(app.get_zoom());
 
-    //             if event_loop.is_err() {
-    //                 break;
-    //             }
+                let image = dunge::block_on(map.render()).unwrap();
+                let image = slint::Image::from_rgba8(image);
+                app.set_map(image);
 
-    //             std::thread::sleep(Duration::from_millis(16));
-    //         }
-    //     })
-    // });
+                let time = now.elapsed();
+                println!("map render took {time:?}");
+            })
+            .expect("Failed to set up rendering notifier");
+    }
 
     app.run()?;
 

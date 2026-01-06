@@ -11,6 +11,42 @@ import { SplitTunneling } from "split-tunneling.slint";
 export { SplitTunneling }
 
 export component AppWindow inherits Window {
+    in property<image> map;
+    in-out property<float> zoom: self.zoom-target;
+    property<float> zoomed-out: 1.35;
+    property<float> zoomed-in: 1.25;
+    property<float> zoom-target: zoomed-in;
+    in-out property<angle> latitude: 57.7deg;
+    in-out property<angle> longitude: 12deg;
+    animate latitude, longitude {
+        duration: 2s;
+        easing: ease-out;
+    }
+
+    animate zoom {
+        duration: 0.5s;
+        easing: ease-in-out;
+    }
+
+    function zoom-out() {
+        if zoom-target != zoomed-out {
+            zoom-target = zoomed-out;
+            zoom_in.stop();
+            zoom_in.start();
+        }
+    }
+    changed longitude => zoom-out();
+    changed latitude => zoom-out();
+
+    zoom_in := Timer {
+        interval: 0.5s;
+        running: false;
+        triggered() => {
+            zoom-target = zoomed-in;
+            zoom_in.stop();
+        }
+    }
+
     title: "Mullvad VPN";
     preferred-width: 320px;
     preferred-height: 568px;
@@ -22,7 +58,7 @@ export component AppWindow inherits Window {
     Image {
         width: root.width;
         height: root.height;
-        source: State.test-image;
+        source: map;
     }
 
     Router {
