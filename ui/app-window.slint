@@ -55,10 +55,15 @@ export component AppWindow inherits Window {
     background: MullvadPalette.dark_blue;
     default-font-family: "Source Sans Pro";
 
-    Image {
-        width: root.width;
+    map_image := Image {
+        x: 0px;
         height: root.height;
         source: map;
+
+        // TODO: the image flexes strangely when resizing the window
+        // but the texture width is rouned up to 64 pixels by dunge,
+        // so we can't just set it like this.
+        // width: root.width;
     }
 
     Router {
