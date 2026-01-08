@@ -386,9 +386,9 @@ fn main() -> anyhow::Result<()> {
 
                 let map = map.get_or_insert_with(|| dunge::block_on(map::Map::new(size)).unwrap());
                 map.resize(size).expect("size isn't 0");
-                map.coords.x = dbg!(app.get_latitude());
-                map.coords.y = dbg!(app.get_longitude());
-                map.zoom = dbg!(app.get_zoom());
+                map.coords.x = app.get_latitude();
+                map.coords.y = app.get_longitude();
+                map.zoom = app.get_zoom();
 
                 let image = dunge::block_on(map.render()).unwrap();
                 let image = slint::Image::from_rgba8(image);

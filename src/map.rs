@@ -66,6 +66,7 @@ pub struct Map {
 impl Map {
     pub async fn new(canvas_size: PhysicalSize) -> anyhow::Result<Self> {
         let cx = dunge::context().await?;
+        let format = Format::RgbAlpha;
 
         let shader = |PassVertex(v): PassVertex<Vec3>,
                       Groups((color, model_view, projection)): Groups<(
@@ -88,7 +89,14 @@ impl Map {
 
         let shader = cx.make_shader(shader);
 
-        let layer = cx.make_layer(&shader, Config::default());
+        let layer = cx.make_layer(
+            &shader,
+            Config {
+                format,
+                // depth: true, // TODO
+                ..Default::default()
+            },
+        );
 
         let land_color = cx.make_uniform(&LAND_COLOR);
         let contour_color = cx.make_uniform(&CONTOUR_COLOR);
@@ -129,7 +137,6 @@ impl Map {
 
         let w = NonZero::new(canvas_size.width).context("width was 0")?;
         let h = NonZero::new(canvas_size.height).context("height was 0")?;
-        let format = Format::SrgbAlpha;
         let texture = cx.make_texture(
             TextureData::empty((w, h), format)
                 .render()
@@ -226,9 +233,8 @@ impl Map {
             self.canvas_size = size;
             let w = NonZero::new(size.width).context("width was 0")?;
             let h = NonZero::new(size.height).context("height was 0")?;
-            let format = Format::SrgbAlpha;
             self.texture = self.cx.make_texture(
-                TextureData::empty((w, h), format)
+                TextureData::empty((w, h), self.texture_format)
                     .render()
                     .bind()
                     .copy_from()
