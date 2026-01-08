@@ -16,7 +16,7 @@ use glam::{Affine3A, Mat4, Vec2, Vec3, Vec4};
 use slint::{PhysicalSize, Rgba8Pixel, SharedPixelBuffer};
 use zerocopy::FromBytes;
 
-const GOTHENBURG: Vec2 = Vec2::new(57.7, 12.0);
+// const GOTHENBURG: Vec2 = Vec2::new(57.7, 12.0);
 
 const LAND_COLOR: Vec4 = Vec4::new(0.16, 0.302, 0.45, 1.0);
 // const LAND_COLOR: Vec4 = Vec4::new(0.049, 0.094, 0.1384, 1.0);
@@ -24,9 +24,7 @@ const OCEAN_COLOR: Vec4 = Vec4::new(0.098, 0.18, 0.271, 1.0);
 const CONTOUR_COLOR: Vec4 = OCEAN_COLOR;
 
 pub struct Map {
-    canvas_size: PhysicalSize,
-    pub coords: Vec2,
-    pub zoom: f32,
+    last_input: Option<MapInput>,
     cx: dunge::Context,
     // shader: Shader<RenderInput<Vert, ()>, ()>,
     layer: Layer<
@@ -63,8 +61,15 @@ pub struct Map {
     contour_model_view: Uniform<Mat4>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MapInput {
+    pub size: PhysicalSize,
+    pub coords: Vec2,
+    pub zoom: f32,
+}
+
 impl Map {
-    pub async fn new(canvas_size: PhysicalSize) -> anyhow::Result<Self> {
+    pub async fn new(size: PhysicalSize) -> anyhow::Result<Self> {
         let cx = dunge::context().await?;
         let format = Format::RgbAlpha;
 
@@ -102,10 +107,7 @@ impl Map {
         let contour_color = cx.make_uniform(&CONTOUR_COLOR);
         let land_model_view = cx.make_uniform(&Mat4::IDENTITY);
         let contour_model_view = cx.make_uniform(&Mat4::IDENTITY);
-        let projection = cx.make_uniform(&projection_matrix(
-            canvas_size.width as f32,
-            canvas_size.height as f32,
-        ));
+        let projection = cx.make_uniform(&projection_matrix(size.width as f32, size.height as f32));
         let land_set = cx.make_set(&shader, (&land_color, &land_model_view, &projection));
         let contour_set = cx.make_set(&shader, (&contour_color, &contour_model_view, &projection));
 
@@ -135,8 +137,8 @@ impl Map {
         let contour_mesh = cx.make_mesh(&MeshData::from_verts(&contour_mesh).expect("mesh data"));
         let land_mesh = cx.make_mesh(&MeshData::from_verts(&land_mesh).expect("mesh data"));
 
-        let w = NonZero::new(canvas_size.width).context("width was 0")?;
-        let h = NonZero::new(canvas_size.height).context("height was 0")?;
+        let w = NonZero::new(size.width).context("width was 0")?;
+        let h = NonZero::new(size.height).context("height was 0")?;
         let texture = cx.make_texture(
             TextureData::empty((w, h), format)
                 .render()
@@ -152,18 +154,13 @@ impl Map {
         );
 
         Ok(Map {
-            canvas_size,
-            coords: GOTHENBURG,
-            zoom: 1.35,
+            last_input: None,
             cx,
             layer,
             land_mesh,
             contour_mesh,
             buffer,
-            pixel_buffer: SharedPixelBuffer::new(
-                texture.bytes_per_row_aligned() / 4,
-                canvas_size.height,
-            ),
+            pixel_buffer: SharedPixelBuffer::new(texture.bytes_per_row_aligned() / 4, size.height),
             texture,
             texture_format: format,
             land_set,
@@ -176,18 +173,28 @@ impl Map {
         })
     }
 
-    fn get_projection_matrix(&self) -> Mat4 {
-        projection_matrix(
-            self.canvas_size.width as f32,
-            self.canvas_size.height as f32,
-        )
-    }
+    pub async fn render(&mut self, input: MapInput) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
+        if self.last_input.as_ref() == Some(&input) {
+            return None;
+        }
 
-    pub async fn render(&mut self) -> anyhow::Result<SharedPixelBuffer<Rgba8Pixel>> {
-        self.coords.y += 1.0;
+        if let Some(last_input) = self.last_input
+            && input.size == last_input.size
+        {
+        } else {
+            if self.resize(input.size).is_err() {
+                return None;
+            };
+        }
+
+        self.last_input = Some(input);
+
+        let now = std::time::Instant::now();
+
+        // TODO: move to self.resize?
         let texture_dim = [
             // TODO: dulge adds padding on each row. this means the
-            // texture will be up to ~16(?) pixels wider than it should be
+            // texture will be up to 64 pixels wider than it should be
             self.texture.bytes_per_row_aligned() / self.texture_format.bytes(),
             u32::from(self.texture.size().height),
         ];
@@ -195,12 +202,15 @@ impl Map {
         let [w, h] = texture_dim;
         if pixel_buf_dim != texture_dim {
             self.pixel_buffer = SharedPixelBuffer::new(w, h);
-            self.projection
-                .update(&self.cx, &self.get_projection_matrix());
+            self.projection.update(
+                &self.cx,
+                &projection_matrix(input.size.width as f32, input.size.height as f32),
+            );
         }
 
-        let model_view = model_view(self.zoom, self.coords);
+        let model_view = model_view(input.zoom, input.coords);
         self.contour_model_view.update(&self.cx, &model_view);
+
         let model_view = model_view * Affine3A::from_scale(Vec3::splat(0.9999));
         self.land_model_view.update(&self.cx, &model_view);
 
@@ -221,34 +231,41 @@ impl Map {
             .await;
 
         let len = (w * h * self.texture_format.bytes()) as usize;
-        let texture_data = self.cx.read(&mut self.buffer).await?;
+        match self.cx.read(&mut self.buffer).await {
+            Ok(texture_data) => {
+                // TODO: this will probably always clone the buffer,
+                // since the UI has a reference to it. Can we avoid this?
+                self.pixel_buffer.make_mut_bytes()[..len].copy_from_slice(&texture_data[..len]);
+            }
+            Err(e) => {
+                eprintln!("Error: failed to copy texture: {e:?}");
+            }
+        }
 
-        self.pixel_buffer.make_mut_bytes()[..len].copy_from_slice(&texture_data[..len]);
+        let time = now.elapsed();
+        println!("map render took {time:?}");
 
-        Ok(self.pixel_buffer.clone())
+        Some(self.pixel_buffer.clone())
     }
 
-    pub fn resize(&mut self, size: PhysicalSize) -> anyhow::Result<()> {
-        if size != self.canvas_size {
-            self.canvas_size = size;
-            let w = NonZero::new(size.width).context("width was 0")?;
-            let h = NonZero::new(size.height).context("height was 0")?;
-            self.texture = self.cx.make_texture(
-                TextureData::empty((w, h), self.texture_format)
-                    .render()
-                    .bind()
-                    .copy_from()
-                    .copy_to(),
-            );
-
-            self.buffer = self.cx.make_buffer(
-                BufferData::empty(
-                    self.texture.bytes_per_row_aligned() * u32::from(self.texture.size().height),
-                )
-                .read()
+    fn resize(&mut self, size: PhysicalSize) -> anyhow::Result<()> {
+        let w = NonZero::new(size.width).context("width was 0")?;
+        let h = NonZero::new(size.height).context("height was 0")?;
+        self.texture = self.cx.make_texture(
+            TextureData::empty((w, h), self.texture_format)
+                .render()
+                .bind()
+                .copy_from()
                 .copy_to(),
-            );
-        }
+        );
+
+        self.buffer = self.cx.make_buffer(
+            BufferData::empty(
+                self.texture.bytes_per_row_aligned() * u32::from(self.texture.size().height),
+            )
+            .read()
+            .copy_to(),
+        );
         Ok(())
     }
 }
@@ -296,5 +313,5 @@ fn coordinates_to_theta_phi(coordinate: Vec2) -> (f32, f32) {
     let (latitude, longitude) = (coordinate.x, coordinate.y);
     let phi = latitude * (PI / 180.0);
     let theta = longitude * (PI / 180.0);
-    return (theta, phi);
+    (theta, phi)
 }

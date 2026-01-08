@@ -360,7 +360,6 @@ fn main() -> anyhow::Result<()> {
     #[cfg(feature = "map")]
     {
         let app_weak = app.as_weak();
-        let mut size = slint::PhysicalSize::new(0, 0);
         let mut map = None;
         app.window()
             .set_rendering_notifier(move |state, _graphics| {
@@ -371,31 +370,20 @@ fn main() -> anyhow::Result<()> {
 
                 let app = app_weak.upgrade().unwrap();
 
-                // TODO: only re-render if inputs have changed, i.e.
-                // size, coords, or zoom
-                // if app.window().size() == size {
-                //     return;
-                // }
-
-                size = app.window().size();
-                if size.width == 0 || size.height == 0 {
-                    return;
-                }
-
-                let now = std::time::Instant::now();
+                let size = app.window().size();
 
                 let map = map.get_or_insert_with(|| dunge::block_on(map::Map::new(size)).unwrap());
-                map.resize(size).expect("size isn't 0");
-                map.coords.x = app.get_latitude();
-                map.coords.y = app.get_longitude();
-                map.zoom = app.get_zoom();
 
-                let image = dunge::block_on(map.render()).unwrap();
-                let image = slint::Image::from_rgba8(image);
-                app.set_map(image);
+                let image = dunge::block_on(map.render(map::MapInput {
+                    size,
+                    coords: glam::Vec2::new(app.get_latitude(), app.get_longitude()),
+                    zoom: app.get_zoom(),
+                }))
+                .map(slint::Image::from_rgba8);
 
-                let time = now.elapsed();
-                println!("map render took {time:?}");
+                if let Some(image) = image {
+                    app.set_map(image);
+                }
             })
             .expect("Failed to set up rendering notifier");
     }
