@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { MainView } from "main-view.slint";
 import { SettingsView, DaitaView, MultihopView, VpnSettingsView, AntiCensorshipView } from "settings.slint";
 import { SelectLocationView } from "select-location.slint";
-import { SplitTunnelingView } from "split-tunneling.slint";
+import { SplitTunnelingView, SplitTunneling } from "split-tunneling.slint";
 import { View, Route } from "route.slint";
 
 component RouterView {
@@ -92,6 +92,12 @@ export component Router {
     RouterView {
         show: Route.split-tunneling.show; 
         hide-at-x: root.width;
+        // HACK: load split tunneling app list when view is entered
+        changed show => {
+            if self.show {
+                SplitTunneling.enter_view();
+            }
+        }
         SplitTunnelingView {}
     }
 

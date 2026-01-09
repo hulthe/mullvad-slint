@@ -10,7 +10,14 @@ export struct AppMeta {
     show-warning: bool,
 }
 
+export enum SplitTunnelingState {
+    None,
+    LoadingApps,
+    Available,
+}
+
 export global SplitTunneling {
+    in property<SplitTunnelingState> state: None;
     in property<[AppMeta]> app_list: [
         { title: "Test 1", icon: @image-url("./images/icon.svg")},
         { title: "Test 2" },
@@ -19,12 +26,20 @@ export global SplitTunneling {
 
     in property<[AppMeta]> filtered_app_list: app_list;
 
+    out property<bool> is-loading-apps: state == SplitTunnelingState.LoadingApps;
+    out property<bool> is-available: state == SplitTunnelingState.Available;
+
+    // Called when the user opens the split tunneling view.
+    callback enter_view();
+    // Called when the user inputs something into the search field.
     callback search_apps(string);
+    // Called when the user clicks an app in the list.
     callback launch_split_app(AppMeta);
 }
 
 component AppEntry inherits SettingsItem {
     in property <AppMeta> meta;
+
     clicked => {
         debug("Launch split app:", meta.title);
         SplitTunneling.launch_split_app(meta);
@@ -100,7 +115,13 @@ export component SplitTunnelingView inherits SettingsSubView {
         text: "All applications";
     }
 
-    VerticalLayout {
+    if SplitTunneling.is-loading-apps: Image {
+        source: @image-url("./images/spinner.svg");
+        height: 64px;
+        transform-rotation: 360deg * animation-tick() / 1s;
+    }
+
+    if SplitTunneling.is-available: VerticalLayout {
         spacing: 2px;
         for app[i] in SplitTunneling.filtered_app_list: AppEntry {
             meta: app;

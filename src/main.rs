@@ -28,12 +28,9 @@ use mullvad_types::{
     states::TunnelState,
 };
 use my_slint::Country;
-use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
+use slint::{ComponentHandle as _, ModelRc, ToSharedString, VecModel};
 
-use crate::{
-    my_slint::{ConnectionState, SplitTunneling},
-    rpc::Rpc,
-};
+use crate::{my_slint::ConnectionState, rpc::Rpc};
 
 /// Convert gRPC relay list from Rust to a Slint list of countries.
 fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
@@ -91,6 +88,7 @@ fn main() -> anyhow::Result<()> {
     let ui_state = app.global::<my_slint::State>();
 
     {
+        // Install connect button callback
         let rpc = rpc.clone();
         ui_state.on_connect_button(move || {
             rpc.spawn_with_rpc(|mut rpc| async move {
@@ -105,6 +103,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     {
+        // Install select country callback
         let rpc = rpc.clone();
         ui_state.on_select_country(move |country| {
             rpc.spawn_with_rpc(|mut rpc| async move {
@@ -124,6 +123,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     {
+        // Install select city callback
         let rpc = rpc.clone();
         ui_state.on_select_city(move |country, city| {
             rpc.spawn_with_rpc(|mut rpc| async move {
@@ -142,6 +142,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     {
+        // Install select relay callback
         let rpc = rpc.clone();
         ui_state.on_select_relay(move |country, city, relay| {
             rpc.spawn_with_rpc(|mut rpc| async move {
@@ -340,22 +341,7 @@ fn main() -> anyhow::Result<()> {
     });
 
     // Populate app list
-    split_tunneling::load_app_list(app.as_weak());
-    let st = app.global::<SplitTunneling>();
-    st.on_launch_split_app(split_tunneling::launch_app);
-    let app_weak = app.as_weak();
-    st.on_search_apps(move |search| {
-        let search = search.to_lowercase();
-        let _ = app_weak.upgrade_in_event_loop(move |app| {
-            let st = app.global::<SplitTunneling>();
-            let app_list = st.get_app_list();
-            let filtered_app_list: VecModel<_> = app_list
-                .iter()
-                .filter(|meta| meta.title.to_lowercase().contains(search.as_str()))
-                .collect();
-            st.set_filtered_app_list(ModelRc::new(Rc::new(filtered_app_list)));
-        });
-    });
+    split_tunneling::setup(&app);
 
     #[cfg(feature = "map")]
     {
