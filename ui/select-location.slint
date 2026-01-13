@@ -35,6 +35,7 @@ component RelayButton inherits VerticalLayout {
         title_touch := TouchArea {
             clicked => {
                 State.select-relay(country, city, relay);
+                Route.select-location.show = false;
             }
         }
     }
@@ -72,6 +73,7 @@ component CityButton inherits VerticalLayout {
             title_touch := TouchArea {
                 clicked => {
                     State.select-city(country, city);
+                    Route.select-location.show = false;
                 }
             }
         }
@@ -136,6 +138,7 @@ component CountryButton inherits VerticalLayout {
             title_touch := TouchArea {
                 clicked => {
                     State.select-country(country);
+                    Route.select-location.show = false;
                 }
             }
         }
