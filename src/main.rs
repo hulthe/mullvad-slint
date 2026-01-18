@@ -28,7 +28,7 @@ use mullvad_types::{
     states::TunnelState,
 };
 use my_slint::Country;
-use slint::{ComponentHandle as _, ModelRc, ToSharedString, VecModel};
+use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
 
 use crate::{my_slint::ConnectionState, rpc::Rpc};
 
@@ -195,6 +195,22 @@ fn main() -> anyhow::Result<()> {
 
         anyhow::Ok(())
     });
+
+    // Install location search callback
+    let app_weak = app.as_weak();
+    app.global::<my_slint::RelayList>()
+        .on_search_location(move |search| {
+            let search = search.to_lowercase();
+            let _ = app_weak.upgrade_in_event_loop(move |app| {
+                let relay_list = app.global::<my_slint::RelayList>();
+                let countries = relay_list.get_countries();
+                let filtered_countries: VecModel<_> = countries
+                    .iter()
+                    .filter(|meta| meta.name.to_lowercase().contains(search.as_str()))
+                    .collect();
+                relay_list.set_filtered_countries(ModelRc::new(Rc::new(filtered_countries)));
+            });
+        });
 
     // Listen for events
     let app_weak = app.as_weak();

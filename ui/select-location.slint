@@ -225,6 +225,15 @@ export component SelectLocationView inherits Rectangle {
                     vertical-alignment: center;
                     horizontal-alignment: left;
                     font-size: 15px;
+                    edited => {
+                        RelayList.search-location(input.text);
+                    }
+                    accepted => {
+                        if RelayList.filtered-countries.length > 0 {
+                            State.select-country(RelayList.filtered-countries[0]);
+                            Route.select-location.show = false;
+                        }
+                    }
                 }
 
                 Image {
@@ -265,7 +274,7 @@ export component SelectLocationView inherits Rectangle {
                     text: "All locations";
                 }
 
-                for country in RelayList.countries: CountryButton {
+                for country in RelayList.filtered-countries: CountryButton {
                     country: country;
                 }
             }

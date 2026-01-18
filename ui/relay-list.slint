@@ -18,4 +18,6 @@ export struct Country {
 
 export global RelayList {
     in-out property <[Country]> countries;
+    in-out property <[Country]> filtered-countries: self.countries;
+    callback search-location(string);
 }
