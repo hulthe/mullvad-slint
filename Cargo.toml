@@ -21,16 +21,19 @@ image = { version = "0.25.8", default-features = false, features = ["default-for
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tokio = { version = "1.47.1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync"] }
-tray-item = { version = "0.10.0", features = ["ksni"], optional = true }
 zerocopy = { version = "0.8.31", features = ["derive", "std"] }
-
-# For launching apps from split tunneling view
-freedesktop-desktop-entry = "0.8.0"
-freedesktop-icons = "0.4.0"
 
 # For rendering the 3d map
 dunge = { version = "0.3.11", optional = true }
 glam = { version = "0.30.9", optional = true}
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Tray icon
+tray-item = { version = "0.10.0", features = ["ksni"], optional = true }
+
+# For launching apps from split tunneling view
+freedesktop-desktop-entry = "0.8.0"
+freedesktop-icons = "0.4.0"
 
 [dependencies.mullvad-management-interface]
 git = "https://github.com/mullvad/mullvadvpn-app.git"

@@ -9,7 +9,7 @@ mod rpc;
 #[cfg(target_os = "linux")]
 mod split_tunneling;
 
-#[cfg(feature = "tray-icon")]
+#[cfg(all(target_os = "linux", feature = "tray-icon"))]
 mod tray;
 
 mod my_slint {
@@ -82,7 +82,7 @@ static RT: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
 fn main() -> anyhow::Result<()> {
     let rpc = Rpc::new();
 
-    #[cfg(feature = "tray-icon")]
+    #[cfg(all(target_os = "linux", feature = "tray-icon"))]
     let _tray = tray::create_tray_icon();
 
     let app = my_slint::AppWindow::new()?;
