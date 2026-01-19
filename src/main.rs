@@ -5,6 +5,8 @@ pub mod api;
 #[cfg(feature = "map")]
 mod map;
 mod rpc;
+
+#[cfg(target_os = "linux")]
 mod split_tunneling;
 
 #[cfg(feature = "tray-icon")]
@@ -357,6 +359,7 @@ fn main() -> anyhow::Result<()> {
     });
 
     // Populate app list
+    #[cfg(target_os = "linux")]
     split_tunneling::setup(&app);
 
     #[cfg(feature = "map")]

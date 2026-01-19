@@ -34,8 +34,10 @@ glam = { version = "0.30.9", optional = true}
 
 [dependencies.mullvad-management-interface]
 git = "https://github.com/mullvad/mullvadvpn-app.git"
+rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741" # 2025.14
 [dependencies.mullvad-types]
 git = "https://github.com/mullvad/mullvadvpn-app.git"
+rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741" # 2025.14
 
 [dependencies.slint]
 version = "1.14.1"
