@@ -42,7 +42,7 @@ pub struct Map {
         >,
     >,
     land_mesh: Mesh<Vec3>,
-    contour_mesh: Mesh<Vec3>,
+    // contour_mesh: Mesh<Vec3>,
     texture: Texture2d<dunge::usage::Texture<true, true, true, true>>,
     texture_format: Format,
     buffer: Buffer<dunge::usage::MapRead<true>>,
@@ -115,30 +115,17 @@ impl Map {
         let contour_set = cx.make_set(&shader, (&contour_color, &contour_model_view, &projection));
 
         let land_points = include_bytes!("../geo/land_positions.gl");
-        let land_points = <[[f32; 3]]>::ref_from_bytes(land_points.as_slice()).unwrap();
-
-        let contour_indices = include_bytes!("../geo/land_contour_indices.gl");
-        let contour_inices = <[u32]>::ref_from_bytes(contour_indices).unwrap();
+        let land_points = <[Vec3]>::ref_from_bytes(land_points.as_slice()).unwrap();
 
         let land_indices = include_bytes!("../geo/land_triangle_indices.gl");
-        let land_indices = <[u32]>::ref_from_bytes(land_indices).unwrap();
+        let land_indices = <[[u32; 3]]>::ref_from_bytes(land_indices).unwrap();
 
-        // TODO: figure out how to render with an IndexBuffer instead
-        let contour_mesh: Vec<Vec3> = contour_inices
-            .iter()
-            .map(|&i| i as usize)
-            .map(|i| land_points[i])
-            .map(Vec3::from_array)
-            .collect();
-        let land_mesh: Vec<Vec3> = land_indices
-            .iter()
-            .map(|&i| i as usize)
-            .map(|i| land_points[i])
-            .map(Vec3::from_array)
-            .collect();
+        // let contour_indices = include_bytes!("../geo/land_contour_indices.gl");
+        // let contour_indices = <[[u32; 3]]>::ref_from_bytes(contour_indices).unwrap();
 
-        let contour_mesh = cx.make_mesh(&MeshData::from_verts(&contour_mesh).expect("mesh data"));
-        let land_mesh = cx.make_mesh(&MeshData::from_verts(&land_mesh).expect("mesh data"));
+        // let contour_mesh =
+        //     cx.make_mesh(&MeshData::new(land_points, contour_indices).expect("mesh data"));
+        let land_mesh = cx.make_mesh(&MeshData::new(land_points, land_indices).expect("mesh data"));
 
         let w = NonZero::new(size.width).context("width was 0")?;
         let h = NonZero::new(size.height).context("height was 0")?;
@@ -161,7 +148,7 @@ impl Map {
             cx,
             layer,
             land_mesh,
-            contour_mesh,
+            // contour_mesh,
             buffer,
             pixel_buffer: SharedPixelBuffer::new(texture.bytes_per_row_aligned() / 4, size.height),
             texture,

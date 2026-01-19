@@ -25,7 +25,7 @@ zerocopy = { version = "0.8.31", features = ["derive", "std"] }
 
 # For rendering the 3d map
 dunge = { version = "0.3.11", optional = true }
-glam = { version = "0.30.9", optional = true}
+glam = { version = "0.30.9", features = ["zerocopy"], optional = true}
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Tray icon
