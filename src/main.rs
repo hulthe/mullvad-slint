@@ -12,11 +12,7 @@ mod split_tunneling;
 #[cfg(all(target_os = "linux", feature = "tray-icon"))]
 mod tray;
 
-mod my_slint {
-    slint::include_modules!();
-
-    impl Eq for Relay {}
-}
+mod slint_ty;
 
 use std::{rc::Rc, sync::LazyLock};
 
@@ -29,11 +25,10 @@ use mullvad_types::{
     relay_list::RelayList,
     states::TunnelState,
 };
-use my_slint::Country;
 use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
-use talpid_types::net::IpVersion;
+use slint_ty::Country;
 
-use crate::{my_slint::ConnectionState, rpc::Rpc};
+use crate::{rpc::Rpc, slint_ty::ConnectionState};
 
 /// Convert gRPC relay list from Rust to a Slint list of countries.
 fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
@@ -48,11 +43,11 @@ fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
                     let relays = city
                         .relays
                         .iter()
-                        .map(|relay| my_slint::Relay {
+                        .map(|relay| slint_ty::Relay {
                             hostname: relay.hostname.to_shared_string(),
                         })
                         .collect::<VecModel<_>>();
-                    my_slint::City {
+                    slint_ty::City {
                         name: city.name.to_shared_string(),
                         code: city.code.to_shared_string(),
                         relays: ModelRc::from(Rc::new(relays)),
@@ -62,7 +57,7 @@ fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
                 })
                 .collect::<VecModel<_>>();
 
-            my_slint::Country {
+            slint_ty::Country {
                 name: country.name.to_shared_string(),
                 code: country.code.to_shared_string(),
                 cities: ModelRc::from(Rc::new(cities)),
@@ -86,9 +81,9 @@ fn main() -> anyhow::Result<()> {
     #[cfg(all(target_os = "linux", feature = "tray-icon"))]
     let _tray = tray::create_tray_icon();
 
-    let app = my_slint::AppWindow::new()?;
+    let app = slint_ty::AppWindow::new()?;
 
-    let ui_state = app.global::<my_slint::State>();
+    let ui_state = app.global::<slint_ty::State>();
 
     {
         // Install connect button callback
@@ -176,11 +171,7 @@ fn main() -> anyhow::Result<()> {
                 let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
                     bail!("Can't configure custom relays");
                 };
-                relay_constraints.wireguard_constraints.ip_version = match device_ip_version {
-                    my_slint::DeviceIpVersion::Auto => Constraint::Any,
-                    my_slint::DeviceIpVersion::Ipv4 => Constraint::Only(IpVersion::V4),
-                    my_slint::DeviceIpVersion::Ipv6 => Constraint::Only(IpVersion::V6),
-                };
+                relay_constraints.wireguard_constraints.ip_version = device_ip_version.into();
                 rpc.set_relay_settings(RelaySettings::Normal(relay_constraints))
                     .await?;
                 Ok(())
@@ -214,7 +205,7 @@ fn main() -> anyhow::Result<()> {
             .context("Failed to get relay list")?;
         app_weak.upgrade_in_event_loop(move |app| {
             let countries = relay_list_to_slint(&relay_list);
-            app.global::<my_slint::RelayList>().set_countries(countries);
+            app.global::<slint_ty::RelayList>().set_countries(countries);
         })?;
 
         anyhow::Ok(())
@@ -222,11 +213,11 @@ fn main() -> anyhow::Result<()> {
 
     // Install location search callback
     let app_weak = app.as_weak();
-    app.global::<my_slint::RelayList>()
+    app.global::<slint_ty::RelayList>()
         .on_search_location(move |search| {
             let search = search.to_lowercase();
             let _ = app_weak.upgrade_in_event_loop(move |app| {
-                let relay_list = app.global::<my_slint::RelayList>();
+                let relay_list = app.global::<slint_ty::RelayList>();
                 let countries = relay_list.get_countries();
                 let filtered_countries: VecModel<_> = countries
                     .iter()
@@ -255,13 +246,7 @@ fn main() -> anyhow::Result<()> {
         let mut last_latlong = (0.0, 0.0);
         let mut update_state = |tunnel_state: &TunnelState| {
             let location = tunnel_state.get_location();
-            let conn_state = match tunnel_state {
-                TunnelState::Disconnected { .. } => ConnectionState::Disconnected,
-                TunnelState::Connecting { .. } => ConnectionState::Connecting,
-                TunnelState::Connected { .. } => ConnectionState::Connected,
-                TunnelState::Disconnecting(..) => ConnectionState::Disconnecting,
-                TunnelState::Error(..) => ConnectionState::Error,
-            };
+            let conn_state = ConnectionState::from(tunnel_state);
 
             let hostname = location
                 .and_then(|l| l.hostname.as_deref())
@@ -293,15 +278,15 @@ fn main() -> anyhow::Result<()> {
                     app.set_latitude(latitude);
                     app.set_longitude(longitude);
                 }
-                let state = app.global::<my_slint::State>();
+                let state = app.global::<slint_ty::State>();
                 state.set_conn(conn_state);
                 state.set_location(location);
                 state.set_relay_hostname(hostname);
             })
         };
 
-        let update_relay_settings = |ui_state: &my_slint::State, relay_settings: &RelaySettings| {
-            let mut device_ip_version = my_slint::DeviceIpVersion::Auto;
+        let update_relay_settings = |ui_state: &slint_ty::State, relay_settings: &RelaySettings| {
+            let mut device_ip_version = slint_ty::DeviceIpVersion::Auto;
             let mut country = "";
             let mut city = "";
             let mut relay = "";
@@ -311,11 +296,7 @@ fn main() -> anyhow::Result<()> {
                     return;
                 };
 
-                device_ip_version = match relay_constraints.wireguard_constraints.ip_version {
-                    Constraint::Any => my_slint::DeviceIpVersion::Auto,
-                    Constraint::Only(IpVersion::V4) => my_slint::DeviceIpVersion::Ipv4,
-                    Constraint::Only(IpVersion::V6) => my_slint::DeviceIpVersion::Ipv6,
-                };
+                device_ip_version = relay_constraints.wireguard_constraints.ip_version.into();
 
                 let Constraint::Only(location) = &relay_constraints.location else {
                     return;
@@ -350,7 +331,7 @@ fn main() -> anyhow::Result<()> {
         let update_settings = |settings: &mullvad_types::settings::Settings| {
             let settings = settings.clone();
             app_weak.upgrade_in_event_loop(move |app| {
-                let ui_state = app.global::<my_slint::State>();
+                let ui_state = app.global::<slint_ty::State>();
 
                 update_relay_settings(&ui_state, &settings.relay_settings);
                 ui_state.set_allow_lan(settings.allow_lan);

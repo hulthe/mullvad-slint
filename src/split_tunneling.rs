@@ -10,7 +10,7 @@ use slint::{ComponentHandle as _, Model as _, ModelRc, Rgba8Pixel, SharedString,
 
 use crate::{
     RT,
-    my_slint::{AppMeta, AppWindow, SplitTunneling, SplitTunnelingState},
+    slint_ty::{AppMeta, AppWindow, SplitTunneling, SplitTunnelingState},
 };
 
 // TODO: don't use constants, ask slint how large the icon should be
