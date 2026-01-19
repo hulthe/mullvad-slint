@@ -1,3 +1,6 @@
+// dunge has a lot of complex types
+#![allow(clippy::type_complexity)]
+
 use std::{f32::consts::PI, num::NonZero};
 
 use anyhow::Context;
@@ -181,10 +184,8 @@ impl Map {
         if let Some(last_input) = self.last_input
             && input.size == last_input.size
         {
-        } else {
-            if self.resize(input.size).is_err() {
-                return None;
-            };
+        } else if self.resize(input.size).is_err() {
+            return None;
         }
 
         self.last_input = Some(input);
