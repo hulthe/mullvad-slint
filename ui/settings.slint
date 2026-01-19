@@ -3,7 +3,7 @@ import { HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
 import { MullvadPalette } from "palette.slint";
 import { RelayList, Country } from "relay-list.slint";
 import { Route } from "route.slint";
-import { State } from "state.slint";
+import { State, DeviceIpVersion } from "state.slint";
 
 component RedGreenToggle inherits Rectangle {
     in-out property <bool> is_enabled: false;
@@ -99,6 +99,19 @@ export component SettingsToggle inherits SettingsItem {
     }
 }
 
+export component SettingsSelectTitle inherits SettingsItem {
+    in property <string> text: "";
+
+    if text != "" : Text {
+        text: text;
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        x: 16px;
+    }
+}
+
+
 export component SettingsSelectable inherits SettingsItem {
     in property <string> text: "";
     in-out property <bool> selected: false;
@@ -106,11 +119,15 @@ export component SettingsSelectable inherits SettingsItem {
               : self.has-hover ? MullvadPalette.lighter_blue
               :                  MullvadPalette.dim_blue;
 
-    if selected : Image {
+    Image {
         source: @image-url("./images/icon-checkmark.svg");
         x: 12px;
         height: 24px;
         colorize: green;
+        opacity: selected ? 100% : 0%;
+        animate opacity {
+            duration: 0.2s;
+        }
     }
 
     if text != "" : Text {
@@ -119,6 +136,10 @@ export component SettingsSelectable inherits SettingsItem {
         font-size: 14px;
         font-weight: selected ? 600 : 400;
         x: 42px;
+
+        animate color {
+            duration: 0.2s;
+        }
     }
 }
 
@@ -331,7 +352,9 @@ export component VpnSettingsView inherits SettingsSubView {
 
     VerticalLayout {
         spacing: 1px;
-        SettingsItem {
+
+        SettingsSelectTitle {
+            text: "Device IP version";
             round-bottom: false;
         }
 
@@ -339,16 +362,21 @@ export component VpnSettingsView inherits SettingsSubView {
             text: "Automatic";
             round-top: false;
             round-bottom: false;
-            selected: true; // TODO
+            selected: State.device-ip-version == DeviceIpVersion.Auto;
+            clicked => { State.set-device-ip-version(DeviceIpVersion.Auto) }
         }
         SettingsSelectable {
             text: "IPv4";
             round-top: false;
             round-bottom: false;
+            selected: State.device-ip-version == DeviceIpVersion.Ipv4;
+            clicked => { State.set-device-ip-version(DeviceIpVersion.Ipv4) }
         }
         SettingsSelectable {
             text: "IPv6";
             round-top: false;
+            selected: State.device-ip-version == DeviceIpVersion.Ipv6;
+            clicked => { State.set-device-ip-version(DeviceIpVersion.Ipv6) }
         }
     }
 }

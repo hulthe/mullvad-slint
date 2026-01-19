@@ -31,6 +31,7 @@ use mullvad_types::{
 };
 use my_slint::Country;
 use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
+use talpid_types::net::IpVersion;
 
 use crate::{my_slint::ConnectionState, rpc::Rpc};
 
@@ -93,7 +94,7 @@ fn main() -> anyhow::Result<()> {
         // Install connect button callback
         let rpc = rpc.clone();
         ui_state.on_connect_button(move || {
-            rpc.spawn_with_rpc(|mut rpc| async move {
+            rpc.spawn_with_rpc(async move |mut rpc| {
                 if rpc.get_tunnel_state().await?.is_disconnected() {
                     rpc.connect_tunnel().await?;
                 } else {
@@ -108,7 +109,7 @@ fn main() -> anyhow::Result<()> {
         // Install select country callback
         let rpc = rpc.clone();
         ui_state.on_select_country(move |country| {
-            rpc.spawn_with_rpc(|mut rpc| async move {
+            rpc.spawn_with_rpc(async move |mut rpc| {
                 let relay_settings = rpc.get_settings().await?.relay_settings;
                 let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
                     bail!("Can't configure custom relays");
@@ -128,7 +129,7 @@ fn main() -> anyhow::Result<()> {
         // Install select city callback
         let rpc = rpc.clone();
         ui_state.on_select_city(move |country, city| {
-            rpc.spawn_with_rpc(|mut rpc| async move {
+            rpc.spawn_with_rpc(async move |mut rpc| {
                 let relay_settings = rpc.get_settings().await?.relay_settings;
                 let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
                     bail!("Can't configure custom relays");
@@ -147,7 +148,7 @@ fn main() -> anyhow::Result<()> {
         // Install select relay callback
         let rpc = rpc.clone();
         ui_state.on_select_relay(move |country, city, relay| {
-            rpc.spawn_with_rpc(|mut rpc| async move {
+            rpc.spawn_with_rpc(async move |mut rpc| {
                 let relay_settings = rpc.get_settings().await?.relay_settings;
                 let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
                     bail!("Can't configure custom relays");
@@ -159,6 +160,27 @@ fn main() -> anyhow::Result<()> {
                         relay.hostname.into(),
                     ),
                 ));
+                rpc.set_relay_settings(RelaySettings::Normal(relay_constraints))
+                    .await?;
+                Ok(())
+            });
+        });
+    }
+
+    {
+        // Install device ip version callback
+        let rpc = rpc.clone();
+        ui_state.on_set_device_ip_version(move |device_ip_version| {
+            rpc.spawn_with_rpc(async move |mut rpc| {
+                let relay_settings = rpc.get_settings().await?.relay_settings;
+                let RelaySettings::Normal(mut relay_constraints) = relay_settings else {
+                    bail!("Can't configure custom relays");
+                };
+                relay_constraints.wireguard_constraints.ip_version = match device_ip_version {
+                    my_slint::DeviceIpVersion::Auto => Constraint::Any,
+                    my_slint::DeviceIpVersion::Ipv4 => Constraint::Only(IpVersion::V4),
+                    my_slint::DeviceIpVersion::Ipv6 => Constraint::Only(IpVersion::V6),
+                };
                 rpc.set_relay_settings(RelaySettings::Normal(relay_constraints))
                     .await?;
                 Ok(())
@@ -278,42 +300,48 @@ fn main() -> anyhow::Result<()> {
             })
         };
 
-        let update_selected_relay = |ui_state: &my_slint::State, relay_settings: &RelaySettings| {
+        let update_relay_settings = |ui_state: &my_slint::State, relay_settings: &RelaySettings| {
+            let mut device_ip_version = my_slint::DeviceIpVersion::Auto;
             let mut country = "";
             let mut city = "";
             let mut relay = "";
 
-            loop {
+            (|| {
                 let RelaySettings::Normal(relay_constraints) = relay_settings else {
-                    break;
+                    return;
+                };
+
+                device_ip_version = match relay_constraints.wireguard_constraints.ip_version {
+                    Constraint::Any => my_slint::DeviceIpVersion::Auto,
+                    Constraint::Only(IpVersion::V4) => my_slint::DeviceIpVersion::Ipv4,
+                    Constraint::Only(IpVersion::V6) => my_slint::DeviceIpVersion::Ipv6,
                 };
 
                 let Constraint::Only(location) = &relay_constraints.location else {
-                    break;
+                    return;
                 };
 
                 let LocationConstraint::Location(location) = location else {
-                    break; // TODO: custom list
+                    return; // TODO: custom list
                 };
 
                 match location {
                     GeographicLocationConstraint::Country(country_code) => {
-                        country = &country_code;
+                        country = country_code;
                     }
                     GeographicLocationConstraint::City(country_code, city_code) => {
-                        country = &country_code;
-                        city = &city_code;
+                        country = country_code;
+                        city = city_code;
                     }
                     GeographicLocationConstraint::Hostname(country_code, city_code, hostname) => {
-                        country = &country_code;
-                        city = &city_code;
-                        relay = &hostname;
+                        country = country_code;
+                        city = city_code;
+                        relay = hostname;
                     }
                 }
+            })();
 
-                break;
-            }
-
+            ui_state.set_device_ip_version(device_ip_version);
             ui_state.set_selected_country(country.into());
             ui_state.set_selected_city(city.into());
             ui_state.set_selected_relay(relay.into());
@@ -324,7 +352,7 @@ fn main() -> anyhow::Result<()> {
             app_weak.upgrade_in_event_loop(move |app| {
                 let ui_state = app.global::<my_slint::State>();
 
-                update_selected_relay(&ui_state, &settings.relay_settings);
+                update_relay_settings(&ui_state, &settings.relay_settings);
                 ui_state.set_allow_lan(settings.allow_lan);
                 ui_state.set_enable_ipv6(settings.tunnel_options.generic.enable_ipv6);
                 ui_state.set_daita_enabled(settings.tunnel_options.wireguard.daita.enabled);

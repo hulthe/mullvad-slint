@@ -3479,6 +3479,7 @@ dependencies = [
  "serde_json",
  "slint",
  "slint-build",
+ "talpid-types",
  "tokio",
  "tray-item",
  "zerocopy",

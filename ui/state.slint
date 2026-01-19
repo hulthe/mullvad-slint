@@ -8,6 +8,12 @@ export enum ConnectionState {
     error,
 }
 
+export enum DeviceIpVersion {
+    Auto,
+    Ipv4,
+    Ipv6,
+}
+
 export global State {
     in-out property <ConnectionState> conn;
 
@@ -80,5 +86,11 @@ export global State {
     callback set-daita-direct-only(bool);
     set-daita-direct-only(enabled) => {
         daita-direct-only = enabled;
+    }
+
+    in-out property <DeviceIpVersion> device-ip-version: Auto;
+    callback set-device-ip-version(DeviceIpVersion);
+    set-device-ip-version(new) => {
+        device-ip-version = new;
     }
 }
