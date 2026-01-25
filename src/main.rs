@@ -244,7 +244,7 @@ fn main() -> anyhow::Result<()> {
 
     // Listen for events
     let app_weak = app.as_weak();
-    rpc.spawn_with_rpc(async move |mut rpc| {
+    rpc.spawn_with_rpc_retry_on_error(async move |mut rpc| {
         let mut events = rpc
             .events_listen()
             .await

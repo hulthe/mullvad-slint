@@ -1,9 +1,9 @@
 use crate::RT;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use mullvad_management_interface::MullvadProxyClient;
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, time::sleep};
 
 #[derive(Clone)]
 pub struct Rpc {
@@ -60,6 +60,32 @@ impl Rpc {
             let result = this.with_rpc(f).await;
             if let Err(e) = result {
                 tracing::error!("{e:#?}");
+            }
+        });
+    }
+
+    /// Shorthand for calling [`Self::spawn_with_rpc`] in a loop until `f` return `Ok`.
+    pub fn spawn_with_rpc_retry_on_error<Fn, Fut>(&self, f: Fn)
+    where
+        Fn: FnOnce(MullvadProxyClient) -> Fut,
+        Fn: Clone,
+        Fut: Future<Output = anyhow::Result<()>>,
+        Fn: Send + 'static,
+        Fut: Send,
+    {
+        let this = self.clone();
+
+        RT.spawn(async move {
+            loop {
+                let f = f.clone();
+                let result = this.with_rpc(f).await;
+                if let Err(e) = result {
+                    tracing::error!("{e:#?}");
+                    tracing::error!("Retrying in 1 sec.");
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+                break;
             }
         });
     }
