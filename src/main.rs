@@ -17,6 +17,7 @@ mod slint_ty;
 use std::{rc::Rc, sync::LazyLock};
 
 use anyhow::{Context, bail};
+use clap::Parser;
 use futures::StreamExt as _;
 use mullvad_management_interface::client::DaemonEvent;
 use mullvad_types::{
@@ -75,7 +76,21 @@ static RT: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
         .expect("Failed to create tokio runtime")
 });
 
+#[derive(Parser)]
+struct Opt {
+    #[clap(long, env = "RUST_LOG", default_value = "info")]
+    log_filter: String,
+}
+
 fn main() -> anyhow::Result<()> {
+    let opt = Opt::parse();
+
+    let fmt_subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(&opt.log_filter)
+        .finish();
+    tracing::subscriber::set_global_default(fmt_subscriber)
+        .context("Failed to initialize tracing subscriber")?;
+
     let rpc = Rpc::new();
 
     #[cfg(all(target_os = "linux", feature = "tray-icon"))]

@@ -226,12 +226,12 @@ impl Map {
                 self.pixel_buffer.make_mut_bytes()[..len].copy_from_slice(&texture_data[..len]);
             }
             Err(e) => {
-                eprintln!("Error: failed to copy texture: {e:?}");
+                tracing::error!("Error: failed to copy texture: {e:?}");
             }
         }
 
         let time = now.elapsed();
-        println!("map render took {time:?}");
+        tracing::trace!("map render took {time:?}");
 
         Some(self.pixel_buffer.clone())
     }

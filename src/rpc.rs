@@ -59,7 +59,7 @@ impl Rpc {
         RT.spawn(async move {
             let result = this.with_rpc(f).await;
             if let Err(e) = result {
-                eprintln!("{e:#?}");
+                tracing::error!("{e:#?}");
             }
         });
     }

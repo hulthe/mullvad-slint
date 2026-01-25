@@ -68,7 +68,7 @@ fn launch_app(app: AppMeta) {
     match result {
         Ok(_child) => {}
         Err(e) => {
-            eprintln!("Failed to spawn {}: {e}", app.title);
+            tracing::warn!("Failed to spawn {}: {e}", app.title);
         }
     }
 }
@@ -94,7 +94,7 @@ fn load_app_list(app_weak: Weak<AppWindow>) {
             let exec = entry
                 .parse_exec()
                 .inspect_err(|e| {
-                    eprintln!("Failed to parse exec for {}: {e}", entry.appid);
+                    tracing::warn!("Failed to parse exec for {}: {e}", entry.appid);
                 })
                 .unwrap_or_default();
             let icon = entry
@@ -114,7 +114,7 @@ fn load_app_list(app_weak: Weak<AppWindow>) {
 
                     image::load_from_memory(&data)
                         .inspect_err(|e| {
-                            eprintln!("Failed to load icon for {}: {e}", entry.appid);
+                            tracing::warn!("Failed to load icon for {}: {e}", entry.appid);
                         })
                         .map(|image| {
                             let image = image
