@@ -3,6 +3,7 @@ import { MainView } from "main-view.slint";
 import { SettingsView, DaitaView, MultihopView, VpnSettingsView, AntiCensorshipView } from "settings.slint";
 import { SelectLocationView } from "select-location.slint";
 import { SplitTunnelingView, SplitTunneling } from "split-tunneling.slint";
+import { ConnectingToServiceView } from "connecting-to-service.slint";
 import { View, Route } from "route.slint";
 
 component RouterView {
@@ -105,5 +106,11 @@ export component Router {
         show: Route.select-location.show;
         hide-at-y: root.height;
         SelectLocationView {}
+    }
+
+    RouterView {
+        show: Route.connecting-to-service.show; 
+        hide-at-x: -root.width;
+        ConnectingToServiceView {}
     }
 }

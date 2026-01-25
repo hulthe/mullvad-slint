@@ -24,6 +24,8 @@ export global State {
     out property <bool> is-error: self.conn == ConnectionState.error;
     out property <bool> is-secure: self.conn != ConnectionState.disconnected && self.conn != ConnectionState.disconnecting;
 
+    in-out property <bool> connected-to-system-service: false;
+
     callback connect-button();
     connect-button() => {
         // Mock the connected/disconnected state

@@ -1,0 +1,59 @@
+import { ScrollView, Button } from "std-widgets.slint";
+import { MullvadPalette } from "palette.slint";
+
+// TODO: Make sure to use correct placements, colors, and font variables, according to design SoT.
+export component ConnectingToServiceView inherits Rectangle {
+    background: MullvadPalette.light_blue;
+
+    VerticalLayout {
+        padding: 16px;
+        padding-top: 96px;
+        spacing: 16px;
+        alignment: start;
+
+        Image {
+            source: @image-url("./images/icon.svg");
+            height: 100px;
+        }
+
+        Image {
+            source: @image-url("./images/logo-text.svg");
+            height: 20px;
+        }
+
+        Text {
+            color: white;
+            text: "Connecting to Mullvad system service...";
+            horizontal-alignment: center;
+            opacity: 0.4;
+            font-size: 14px;
+            // font-weight: 700;
+        }
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        padding-bottom: 24px;
+        alignment: end;
+
+        Rectangle {
+            background: MullvadPalette.dark_blue;
+            border-radius: 8px;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 16px;
+
+                Text {
+                    color: white;
+                    text: "Unable to contact the Mullvad system service, your connection might be unsecure. Please troubleshoot or send a problem report by clicking the \"Learn more\" button.";
+                    wrap: word-wrap;
+                }
+
+                // TODO: custom button
+                Button {
+                    text: "Learn more";
+                }
+            }
+        }
+    }
+}

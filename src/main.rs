@@ -29,7 +29,10 @@ use mullvad_types::{
 use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
 use slint_ty::Country;
 
-use crate::{rpc::Rpc, slint_ty::ConnectionState};
+use crate::{
+    rpc::Rpc,
+    slint_ty::{ConnectionState, Route, View},
+};
 
 /// Convert gRPC relay list from Rust to a Slint list of countries.
 fn relay_list_to_slint(relay_list: &RelayList) -> ModelRc<Country> {
@@ -243,8 +246,10 @@ fn main() -> anyhow::Result<()> {
         });
 
     // Listen for events
-    let app_weak = app.as_weak();
-    rpc.spawn_with_rpc_retry_on_error(async move |mut rpc| {
+    async fn listen_for_events(
+        mut rpc: mullvad_management_interface::MullvadProxyClient,
+        app_weak: slint::Weak<slint_ty::AppWindow>,
+    ) -> anyhow::Result<()> {
         let mut events = rpc
             .events_listen()
             .await
@@ -365,6 +370,11 @@ fn main() -> anyhow::Result<()> {
         update_state(&tunnel_state)?;
         update_settings(&settings)?;
 
+        let _ = app_weak.upgrade_in_event_loop(|app| {
+            app.global::<Route>()
+                .set_connecting_to_service(View { show: false });
+        });
+
         while let Some(event) = events.next().await {
             match event? {
                 DaemonEvent::TunnelState(new) => {
@@ -380,6 +390,18 @@ fn main() -> anyhow::Result<()> {
         }
 
         Ok(())
+    }
+
+    let app_weak = app.as_weak();
+    rpc.spawn_with_rpc_retry_on_error(async move |rpc| {
+        listen_for_events(rpc, app_weak.clone())
+            .await
+            .inspect_err(|_| {
+                let _ = app_weak.upgrade_in_event_loop(|app| {
+                    app.global::<Route>()
+                        .set_connecting_to_service(View { show: true });
+                });
+            })
     });
 
     // Populate app list
