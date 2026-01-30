@@ -12,11 +12,10 @@ pub fn create_tray_icon() -> anyhow::Result<TrayItem> {
         .into_rgba8()
         .into_vec()
         .chunks_exact(4)
-        .map(|rgba| {
+        .flat_map(|rgba| {
             let &[r, g, b, a] = rgba else { unreachable!() };
             [a, r, g, b]
         })
-        .flatten()
         .collect::<Vec<u8>>();
 
     let tray_icon_image = IconSource::Data {
