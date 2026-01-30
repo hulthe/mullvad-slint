@@ -25,7 +25,8 @@ use zerocopy::FromBytes;
 const LAND_COLOR: Vec4 = Vec4::new(0.16, 0.302, 0.45, 1.0);
 // const LAND_COLOR: Vec4 = Vec4::new(0.049, 0.094, 0.1384, 1.0);
 const OCEAN_COLOR: Vec4 = Vec4::new(0.098, 0.18, 0.271, 1.0);
-const CONTOUR_COLOR: Vec4 = Vec4::new(0.8, 0.1, 0.1, 0.1); // Angry red
+// HACK: Setting the contour color to the ocean color hides the contours inside the globe
+const CONTOUR_COLOR: Vec4 = OCEAN_COLOR;
 
 pub struct Map {
     last_input: Option<MapInput>,
@@ -143,10 +144,6 @@ impl Map {
 
         let land_indices = include_bytes!("../geo/land_triangle_indices.gl");
         let land_indices = <[[u32; 3]]>::ref_from_bytes(land_indices).unwrap();
-        let land_indices = &land_indices
-            .iter()
-            .map(|&[a, b, c]| [c, b, a])
-            .collect::<Vec<_>>();
 
         let contour_indices = include_bytes!("../geo/land_contour_indices.gl");
         let contour_indices = <[u32]>::ref_from_bytes(contour_indices).unwrap();
