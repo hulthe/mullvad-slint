@@ -114,7 +114,7 @@ impl Map {
             &shader,
             Config {
                 format,
-                // depth: true, // TODO
+                depth: true,
                 ..Default::default()
             },
         );
@@ -123,7 +123,7 @@ impl Map {
             &shader,
             Config {
                 format,
-                // depth: true, // TODO
+                depth: true,
                 polygon: dunge::Polygon::Line,
                 topology: dunge::Topology::LineStrip,
                 ..Default::default()
@@ -249,14 +249,17 @@ impl Map {
         self.cx
             .shed(|s| {
                 let background = Color::from_standard([0.0, 0.0, 0.0, 0.0]);
-                s.render(&self.texture, background)
-                    .layer(&self.layer)
-                    .set(&self.land_set)
-                    .draw(&self.land_mesh)
-                    .layer(&self.contour_layer)
-                    // TODO: contours is broken
-                    .set(&self.contour_set)
-                    .draw(&self.contour_mesh);
+                s.render(
+                    &self.texture,
+                    dunge::Options::from(background).clear_depth(1.0),
+                )
+                .layer(&self.layer)
+                .set(&self.land_set)
+                .draw(&self.land_mesh)
+                .layer(&self.contour_layer)
+                // TODO: contours is broken
+                .set(&self.contour_set)
+                .draw(&self.contour_mesh);
 
                 s.copy(self.texture.color(), &self.buffer);
             })
