@@ -24,7 +24,7 @@ use zerocopy::FromBytes;
 const LAND_COLOR: Vec4 = Vec4::new(0.16, 0.302, 0.45, 1.0);
 // const LAND_COLOR: Vec4 = Vec4::new(0.049, 0.094, 0.1384, 1.0);
 const OCEAN_COLOR: Vec4 = Vec4::new(0.098, 0.18, 0.271, 1.0);
-const CONTOUR_COLOR: Vec4 = OCEAN_COLOR;
+const CONTOUR_COLOR: Vec4 = Vec4::new(0.8, 0.1, 0.1, 1.0); // Angry red
 
 pub struct Map {
     last_input: Option<MapInput>,
@@ -41,8 +41,19 @@ pub struct Map {
             ),
         >,
     >,
+    contour_layer: Layer<
+        Input<
+            Vec3,
+            (),
+            (
+                Ret<Global, Pointer<dunge::types::Vec4<f32>>>,
+                Ret<Global, Pointer<dunge::types::Mat4>>,
+                Ret<Global, Pointer<dunge::types::Mat4>>,
+            ),
+        >,
+    >,
     land_mesh: Mesh<Vec3>,
-    // contour_mesh: Mesh<Vec3>,
+    contour_mesh: Mesh<Vec3>,
     texture: Texture2d<dunge::usage::Texture<true, true, true, true>>,
     texture_format: Format,
     buffer: Buffer<dunge::usage::MapRead<true>>,
@@ -73,7 +84,7 @@ pub struct MapInput {
 
 impl Map {
     pub async fn new(size: PhysicalSize) -> anyhow::Result<Self> {
-        let cx = dunge::context().await?;
+        let cx = dunge::context().enable_polygon_mode_line().await?;
         let format = Format::RgbAlpha;
 
         let shader = |PassVertex(v): PassVertex<Vec3>,
@@ -85,7 +96,7 @@ impl Map {
             // Apply the projection and view matrices to the vertex position
             let projection = projection.load();
             let model_view = model_view.load();
-            let place = projection * model_view * sl::vec4(v.x(), v.y(), v.z(), 1.);
+            let place = projection * model_view * sl::vec4_append(v, 1.0);
 
             // Set vertex color
             let color = sl::fragment(color.load());
@@ -106,6 +117,17 @@ impl Map {
             },
         );
 
+        let contour_layer = cx.make_layer(
+            &shader,
+            Config {
+                format,
+                // depth: true, // TODO
+                polygon: dunge::Polygon::Line,
+                topology: dunge::Topology::LineStrip,
+                ..Default::default()
+            },
+        );
+
         let land_color = cx.make_uniform(&LAND_COLOR);
         let contour_color = cx.make_uniform(&CONTOUR_COLOR);
         let land_model_view = cx.make_uniform(&Mat4::IDENTITY);
@@ -120,11 +142,15 @@ impl Map {
         let land_indices = include_bytes!("../geo/land_triangle_indices.gl");
         let land_indices = <[[u32; 3]]>::ref_from_bytes(land_indices).unwrap();
 
-        // let contour_indices = include_bytes!("../geo/land_contour_indices.gl");
-        // let contour_indices = <[[u32; 3]]>::ref_from_bytes(contour_indices).unwrap();
+        let contour_indices = include_bytes!("../geo/land_contour_indices.gl");
+        let contour_indices = <[u32]>::ref_from_bytes(contour_indices).unwrap();
+        let contour_points = contour_indices
+            .iter()
+            .map(|&i| land_points[i as usize])
+            .collect::<Vec<_>>();
 
-        // let contour_mesh =
-        //     cx.make_mesh(&MeshData::new(land_points, contour_indices).expect("mesh data"));
+        let contour_mesh =
+            cx.make_mesh(&MeshData::from_verts(&contour_points).expect("Land points was empty"));
         let land_mesh = cx.make_mesh(&MeshData::new(land_points, land_indices).expect("mesh data"));
 
         let w = NonZero::new(size.width).context("width was 0")?;
@@ -147,8 +173,9 @@ impl Map {
             last_input: None,
             cx,
             layer,
+            contour_layer,
             land_mesh,
-            // contour_mesh,
+            contour_mesh,
             buffer,
             pixel_buffer: SharedPixelBuffer::new(texture.bytes_per_row_aligned() / 4, size.height),
             texture,
@@ -209,10 +236,10 @@ impl Map {
                     .layer(&self.layer)
                     .set(&self.land_set)
                     .draw(&self.land_mesh)
+                    .layer(&self.contour_layer)
                     // TODO: contours is broken
-                    // .set(&self.contour_set)
-                    // .draw(&self.contour_mesh)
-                ;
+                    .set(&self.contour_set)
+                    .draw(&self.contour_mesh);
 
                 s.copy(&self.texture, &self.buffer);
             })
