@@ -143,6 +143,10 @@ impl Map {
 
         let land_indices = include_bytes!("../geo/land_triangle_indices.gl");
         let land_indices = <[[u32; 3]]>::ref_from_bytes(land_indices).unwrap();
+        let land_indices = &land_indices
+            .iter()
+            .map(|&[a, b, c]| [c, b, a])
+            .collect::<Vec<_>>();
 
         let contour_indices = include_bytes!("../geo/land_contour_indices.gl");
         let contour_indices = <[u32]>::ref_from_bytes(contour_indices).unwrap();
