@@ -5,7 +5,7 @@ use std::{f32::consts::PI, num::NonZero};
 
 use anyhow::Context;
 use dunge::{
-    Config, Layer,
+    Config, Layer, RenderBuffer,
     buffer::{Buffer, BufferData, Texture2d, TextureData},
     color::{Color, Format},
     mesh::{Mesh, MeshData},
@@ -14,6 +14,7 @@ use dunge::{
     sl::{self, Global, Groups, PassVertex, Render, Ret},
     storage::Uniform,
     types::Pointer,
+    usage::Texture,
 };
 use glam::{Affine3A, Mat4, Vec2, Vec3, Vec4};
 use slint::{PhysicalSize, Rgba8Pixel, SharedPixelBuffer};
@@ -54,7 +55,8 @@ pub struct Map {
     >,
     land_mesh: Mesh<Vec3>,
     contour_mesh: Mesh<Vec3>,
-    texture: Texture2d<dunge::usage::Texture<true, true, true, true>>,
+    texture:
+        RenderBuffer<Texture2d<Texture<true, true, true, true>>, Texture<true, true, true, true>>,
     texture_format: Format,
     buffer: Buffer<dunge::usage::MapRead<true>>,
     pixel_buffer: SharedPixelBuffer<Rgba8Pixel>,
@@ -68,8 +70,8 @@ pub struct Map {
         Ret<Global, Pointer<dunge::types::Mat4>>,
         Ret<Global, Pointer<dunge::types::Mat4>>,
     )>,
-    land_color: Uniform<Vec4>,
-    contour_color: Uniform<Vec4>,
+    // land_color: Uniform<Vec4>,
+    // contour_color: Uniform<Vec4>,
     projection: Uniform<Mat4>,
     land_model_view: Uniform<Mat4>,
     contour_model_view: Uniform<Mat4>,
@@ -155,7 +157,7 @@ impl Map {
 
         let w = NonZero::new(size.width).context("width was 0")?;
         let h = NonZero::new(size.height).context("height was 0")?;
-        let texture = cx.make_texture(
+        let color_texture = cx.make_texture(
             TextureData::empty((w, h), format)
                 .render()
                 .bind()
@@ -163,10 +165,22 @@ impl Map {
                 .copy_to(),
         );
 
-        let buffer = cx.make_buffer(
-            BufferData::empty(texture.bytes_per_row_aligned() * u32::from(texture.size().height))
-                .read()
+        let depth_texture = cx.make_texture(
+            TextureData::empty((w, h), Format::Depth)
+                .render()
+                .bind()
+                .copy_from()
                 .copy_to(),
+        );
+
+        let texture = RenderBuffer::new(color_texture, depth_texture);
+
+        let buffer = cx.make_buffer(
+            BufferData::empty(
+                texture.color().bytes_per_row_aligned() * u32::from(texture.size().height),
+            )
+            .read()
+            .copy_to(),
         );
 
         Ok(Map {
@@ -177,13 +191,16 @@ impl Map {
             land_mesh,
             contour_mesh,
             buffer,
-            pixel_buffer: SharedPixelBuffer::new(texture.bytes_per_row_aligned() / 4, size.height),
+            pixel_buffer: SharedPixelBuffer::new(
+                texture.color().bytes_per_row_aligned() / 4,
+                size.height,
+            ),
             texture,
             texture_format: format,
             land_set,
             contour_set,
-            land_color,
-            contour_color,
+            // land_color,
+            // contour_color,
             projection,
             land_model_view,
             contour_model_view,
@@ -210,7 +227,7 @@ impl Map {
         let texture_dim = [
             // TODO: dulge adds padding on each row. this means the
             // texture will be up to 64 pixels wider than it should be
-            self.texture.bytes_per_row_aligned() / self.texture_format.bytes(),
+            self.texture.color().bytes_per_row_aligned() / self.texture_format.bytes(),
             u32::from(self.texture.size().height),
         ];
         let pixel_buf_dim = self.pixel_buffer.size().to_array();
@@ -241,7 +258,7 @@ impl Map {
                     .set(&self.contour_set)
                     .draw(&self.contour_mesh);
 
-                s.copy(&self.texture, &self.buffer);
+                s.copy(self.texture.color(), &self.buffer);
             })
             .await;
 
@@ -266,7 +283,7 @@ impl Map {
     fn resize(&mut self, size: PhysicalSize) -> anyhow::Result<()> {
         let w = NonZero::new(size.width).context("width was 0")?;
         let h = NonZero::new(size.height).context("height was 0")?;
-        self.texture = self.cx.make_texture(
+        let texture = self.cx.make_texture(
             TextureData::empty((w, h), self.texture_format)
                 .render()
                 .bind()
@@ -274,9 +291,19 @@ impl Map {
                 .copy_to(),
         );
 
+        let depth_texture = self.cx.make_texture(
+            TextureData::empty((w, h), Format::Depth)
+                .render()
+                .bind()
+                .copy_from()
+                .copy_to(),
+        );
+
+        self.texture = RenderBuffer::new(texture, depth_texture);
         self.buffer = self.cx.make_buffer(
             BufferData::empty(
-                self.texture.bytes_per_row_aligned() * u32::from(self.texture.size().height),
+                self.texture.color().bytes_per_row_aligned()
+                    * u32::from(self.texture.size().height),
             )
             .read()
             .copy_to(),
