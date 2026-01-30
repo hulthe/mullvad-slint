@@ -38,6 +38,12 @@ tray-item = { version = "0.10.0", features = ["ksni"], optional = true }
 freedesktop-desktop-entry = "0.8.0"
 freedesktop-icons = "0.4.0"
 
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# HACK: we need to enable the "winerror" feature here because "parity-tokio-ipc" fails to compile
+# It should be enabled by management interface
+winapi = { version = "0.3", features = ["winerror"] }
+
 [dependencies.mullvad-management-interface]
 git = "https://github.com/mullvad/mullvadvpn-app.git"
 rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741" # 2025.14

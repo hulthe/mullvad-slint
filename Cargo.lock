@@ -3598,6 +3598,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tray-item",
+ "winapi",
  "zerocopy",
 ]
 
