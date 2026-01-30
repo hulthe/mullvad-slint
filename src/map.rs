@@ -25,7 +25,7 @@ use zerocopy::FromBytes;
 const LAND_COLOR: Vec4 = Vec4::new(0.16, 0.302, 0.45, 1.0);
 // const LAND_COLOR: Vec4 = Vec4::new(0.049, 0.094, 0.1384, 1.0);
 const OCEAN_COLOR: Vec4 = Vec4::new(0.098, 0.18, 0.271, 1.0);
-const CONTOUR_COLOR: Vec4 = Vec4::new(0.8, 0.1, 0.1, 1.0); // Angry red
+const CONTOUR_COLOR: Vec4 = Vec4::new(0.8, 0.1, 0.1, 0.1); // Angry red
 
 pub struct Map {
     last_input: Option<MapInput>,
