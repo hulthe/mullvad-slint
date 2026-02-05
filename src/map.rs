@@ -1,318 +1,430 @@
-// dunge has a lot of complex types
-#![allow(clippy::type_complexity)]
+use std::f32::consts::PI;
 
-use std::{f32::consts::PI, num::NonZero};
-
-use anyhow::Context;
-use dunge::{
-    Config, Layer, RenderBuffer,
-    buffer::{Buffer, BufferData, Texture2d, TextureData},
-    color::{Color, Format},
-    mesh::{Mesh, MeshData},
-    render::Input,
-    set::UniqueSet,
-    sl::{self, Global, Groups, PassVertex, Render, Ret},
-    storage::Uniform,
-    types::Pointer,
-    usage::Texture,
-};
 use glam::{Affine3A, Mat4, Vec2, Vec3, Vec4};
-use slint::{PhysicalSize, Rgba8Pixel, SharedPixelBuffer};
-use zerocopy::FromBytes;
-
-// const GOTHENBURG: Vec2 = Vec2::new(57.7, 12.0);
+use slint::wgpu_28::wgpu;
+use wgpu::util::DeviceExt;
 
 const LAND_COLOR: Vec4 = Vec4::new(0.16, 0.302, 0.45, 1.0);
-// const LAND_COLOR: Vec4 = Vec4::new(0.049, 0.094, 0.1384, 1.0);
 const OCEAN_COLOR: Vec4 = Vec4::new(0.098, 0.18, 0.271, 1.0);
 // HACK: Setting the contour color to the ocean color hides the contours inside the globe
 const CONTOUR_COLOR: Vec4 = OCEAN_COLOR;
 
+/// Uniform buffer layout for rendering
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Uniforms {
+    projection: [[f32; 4]; 4],
+    model_view: [[f32; 4]; 4],
+    color: [f32; 4],
+    _padding: [f32; 12], // Padding to align to 256 bytes for dynamic offset
+}
+
 pub struct Map {
     last_input: Option<MapInput>,
-    cx: dunge::Context,
-    // shader: Shader<RenderInput<Vert, ()>, ()>,
-    layer: Layer<
-        Input<
-            Vec3,
-            (),
-            (
-                Ret<Global, Pointer<dunge::types::Vec4<f32>>>,
-                Ret<Global, Pointer<dunge::types::Mat4>>,
-                Ret<Global, Pointer<dunge::types::Mat4>>,
-            ),
-        >,
-    >,
-    contour_layer: Layer<
-        Input<
-            Vec3,
-            (),
-            (
-                Ret<Global, Pointer<dunge::types::Vec4<f32>>>,
-                Ret<Global, Pointer<dunge::types::Mat4>>,
-                Ret<Global, Pointer<dunge::types::Mat4>>,
-            ),
-        >,
-    >,
-    land_mesh: Mesh<Vec3>,
-    contour_mesh: Mesh<Vec3>,
-    texture:
-        RenderBuffer<Texture2d<Texture<true, true, true, true>>, Texture<true, true, true, true>>,
-    texture_format: Format,
-    buffer: Buffer<dunge::usage::MapRead<true>>,
-    pixel_buffer: SharedPixelBuffer<Rgba8Pixel>,
-    land_set: UniqueSet<(
-        Ret<Global, Pointer<dunge::types::Vec4<f32>>>,
-        Ret<Global, Pointer<dunge::types::Mat4>>,
-        Ret<Global, Pointer<dunge::types::Mat4>>,
-    )>,
-    contour_set: UniqueSet<(
-        Ret<Global, Pointer<dunge::types::Vec4<f32>>>,
-        Ret<Global, Pointer<dunge::types::Mat4>>,
-        Ret<Global, Pointer<dunge::types::Mat4>>,
-    )>,
-    // land_color: Uniform<Vec4>,
-    // contour_color: Uniform<Vec4>,
-    projection: Uniform<Mat4>,
-    land_model_view: Uniform<Mat4>,
-    contour_model_view: Uniform<Mat4>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    pipeline: wgpu::RenderPipeline,
+    contour_pipeline: wgpu::RenderPipeline,
+    land_vertex_buffer: wgpu::Buffer,
+    land_index_buffer: wgpu::Buffer,
+    land_index_count: u32,
+    contour_vertex_buffer: wgpu::Buffer,
+    contour_vertex_count: u32,
+    land_uniform_buffer: wgpu::Buffer,
+    contour_uniform_buffer: wgpu::Buffer,
+    land_bind_group: wgpu::BindGroup,
+    contour_bind_group: wgpu::BindGroup,
+    texture: wgpu::Texture,
+    depth_texture: wgpu::Texture,
+    texture_size: (u32, u32),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MapInput {
-    pub size: PhysicalSize,
+    pub size: slint::PhysicalSize,
     pub coords: Vec2,
     pub zoom: f32,
 }
 
 impl Map {
-    pub async fn new(size: PhysicalSize) -> anyhow::Result<Self> {
-        let cx = dunge::context().enable_polygon_mode_line().await?;
-        let format = Format::RgbAlpha;
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, size: slint::PhysicalSize) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Map Shader"),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                "map_shader.wgsl"
+            ))),
+        });
 
-        let shader = |PassVertex(v): PassVertex<Vec3>,
-                      Groups((color, model_view, projection)): Groups<(
-            Uniform<Vec4>,
-            Uniform<Mat4>,
-            Uniform<Mat4>,
-        )>| {
-            // Apply the projection and view matrices to the vertex position
-            let projection = projection.load();
-            let model_view = model_view.load();
-            let place = projection * model_view * sl::vec4_append(v, 1.0);
+        // Create bind group layout
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Map Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
 
-            // Set vertex color
-            let color = sl::fragment(color.load());
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Map Pipeline Layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            immediate_size: 0,
+        });
 
-            // As a result, return a program that describes how to
-            // compute the vertex position and the fragment color
-            Render { place, color }
+        let vertex_buffer_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[wgpu::VertexAttribute {
+                offset: 0,
+                shader_location: 0,
+                format: wgpu::VertexFormat::Float32x3,
+            }],
         };
 
-        let shader = cx.make_shader(shader);
-
-        let layer = cx.make_layer(
-            &shader,
-            Config {
-                format,
-                depth: true,
-                ..Default::default()
+        // Land pipeline (triangles)
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Land Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[vertex_buffer_layout.clone()],
+                compilation_options: Default::default(),
             },
-        );
-
-        let contour_layer = cx.make_layer(
-            &shader,
-            Config {
-                format,
-                depth: true,
-                polygon: dunge::Polygon::Line,
-                topology: dunge::Topology::LineStrip,
-                ..Default::default()
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
             },
-        );
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
 
-        let land_color = cx.make_uniform(&LAND_COLOR);
-        let contour_color = cx.make_uniform(&CONTOUR_COLOR);
-        let land_model_view = cx.make_uniform(&Mat4::IDENTITY);
-        let contour_model_view = cx.make_uniform(&Mat4::IDENTITY);
-        let projection = cx.make_uniform(&projection_matrix(size.width as f32, size.height as f32));
-        let land_set = cx.make_set(&shader, (&land_color, &land_model_view, &projection));
-        let contour_set = cx.make_set(&shader, (&contour_color, &contour_model_view, &projection));
+        // Contour pipeline (line strip)
+        let contour_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Contour Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[vertex_buffer_layout],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::LineStrip,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
 
-        let land_points = include_bytes!("../geo/land_positions.gl");
-        let land_points = <[Vec3]>::ref_from_bytes(land_points.as_slice()).unwrap();
+        // Load geometry data
+        let land_points_bytes = include_bytes!("../geo/land_positions.gl");
+        let land_points: &[[f32; 3]] = bytemuck::cast_slice(land_points_bytes.as_slice());
 
-        let land_indices = include_bytes!("../geo/land_triangle_indices.gl");
-        let land_indices = <[[u32; 3]]>::ref_from_bytes(land_indices).unwrap();
+        let land_indices_bytes = include_bytes!("../geo/land_triangle_indices.gl");
+        let land_indices: &[u32] = bytemuck::cast_slice(land_indices_bytes);
 
-        let contour_indices = include_bytes!("../geo/land_contour_indices.gl");
-        let contour_indices = <[u32]>::ref_from_bytes(contour_indices).unwrap();
-        let contour_points = contour_indices
+        let contour_indices_bytes = include_bytes!("../geo/land_contour_indices.gl");
+        let contour_indices: &[u32] = bytemuck::cast_slice(contour_indices_bytes);
+        let contour_points: Vec<[f32; 3]> = contour_indices
             .iter()
             .map(|&i| land_points[i as usize])
-            .collect::<Vec<_>>();
+            .collect();
 
-        let contour_mesh =
-            cx.make_mesh(&MeshData::from_verts(&contour_points).expect("Land points was empty"));
-        let land_mesh = cx.make_mesh(&MeshData::new(land_points, land_indices).expect("mesh data"));
+        // Create vertex buffers
+        let land_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Land Vertex Buffer"),
+            contents: bytemuck::cast_slice(land_points),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
-        let w = NonZero::new(size.width).context("width was 0")?;
-        let h = NonZero::new(size.height).context("height was 0")?;
-        let color_texture = cx.make_texture(
-            TextureData::empty((w, h), format)
-                .render()
-                .bind()
-                .copy_from()
-                .copy_to(),
-        );
+        let land_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Land Index Buffer"),
+            contents: bytemuck::cast_slice(land_indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
-        let depth_texture = cx.make_texture(
-            TextureData::empty((w, h), Format::Depth)
-                .render()
-                .bind()
-                .copy_from()
-                .copy_to(),
-        );
+        let contour_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Contour Vertex Buffer"),
+            contents: bytemuck::cast_slice(&contour_points),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
-        let texture = RenderBuffer::new(color_texture, depth_texture);
+        // Create uniform buffers
+        let land_uniforms = Uniforms {
+            projection: Mat4::IDENTITY.to_cols_array_2d(),
+            model_view: Mat4::IDENTITY.to_cols_array_2d(),
+            color: LAND_COLOR.to_array(),
+            _padding: [0.0; 12],
+        };
 
-        let buffer = cx.make_buffer(
-            BufferData::empty(
-                texture.color().bytes_per_row_aligned() * u32::from(texture.size().height),
-            )
-            .read()
-            .copy_to(),
-        );
+        let land_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Land Uniform Buffer"),
+            contents: bytemuck::bytes_of(&land_uniforms),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
-        Ok(Map {
+        let contour_uniforms = Uniforms {
+            projection: Mat4::IDENTITY.to_cols_array_2d(),
+            model_view: Mat4::IDENTITY.to_cols_array_2d(),
+            color: CONTOUR_COLOR.to_array(),
+            _padding: [0.0; 12],
+        };
+
+        let contour_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Contour Uniform Buffer"),
+            contents: bytemuck::bytes_of(&contour_uniforms),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // Create bind groups
+        let land_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Land Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: land_uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        let contour_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Contour Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: contour_uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        let (texture, depth_texture) = Self::create_textures(device, size.width, size.height);
+
+        Self {
             last_input: None,
-            cx,
-            layer,
-            contour_layer,
-            land_mesh,
-            contour_mesh,
-            buffer,
-            pixel_buffer: SharedPixelBuffer::new(
-                texture.color().bytes_per_row_aligned() / 4,
-                size.height,
-            ),
+            device: device.clone(),
+            queue: queue.clone(),
+            pipeline,
+            contour_pipeline,
+            land_vertex_buffer,
+            land_index_buffer,
+            land_index_count: land_indices.len() as u32,
+            contour_vertex_buffer,
+            contour_vertex_count: contour_points.len() as u32,
+            land_uniform_buffer,
+            contour_uniform_buffer,
+            land_bind_group,
+            contour_bind_group,
             texture,
-            texture_format: format,
-            land_set,
-            contour_set,
-            // land_color,
-            // contour_color,
-            projection,
-            land_model_view,
-            contour_model_view,
-        })
+            depth_texture,
+            texture_size: (size.width, size.height),
+        }
     }
 
-    pub async fn render(&mut self, input: MapInput) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
+    fn create_textures(
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+    ) -> (wgpu::Texture, wgpu::Texture) {
+        let width = width.max(1);
+        let height = height.max(1);
+
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Map Texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Map Depth Texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        (texture, depth_texture)
+    }
+
+    pub fn render(&mut self, input: MapInput) -> Option<wgpu::Texture> {
+        // Check if we need to re-render
         if self.last_input.as_ref() == Some(&input) {
             return None;
         }
 
-        if let Some(last_input) = self.last_input
-            && input.size == last_input.size
-        {
-        } else if self.resize(input.size).is_err() {
-            return None;
+        let now = std::time::Instant::now();
+
+        // Resize textures if needed
+        let new_size = (input.size.width.max(1), input.size.height.max(1));
+        if self.texture_size != new_size {
+            let (texture, depth_texture) =
+                Self::create_textures(&self.device, new_size.0, new_size.1);
+            self.texture = texture;
+            self.depth_texture = depth_texture;
+            self.texture_size = new_size;
         }
 
         self.last_input = Some(input);
 
-        let now = std::time::Instant::now();
-
-        // TODO: move to self.resize?
-        let texture_dim = [
-            // TODO: dulge adds padding on each row. this means the
-            // texture will be up to 64 pixels wider than it should be
-            self.texture.color().bytes_per_row_aligned() / self.texture_format.bytes(),
-            u32::from(self.texture.size().height),
-        ];
-        let pixel_buf_dim = self.pixel_buffer.size().to_array();
-        let [w, h] = texture_dim;
-        if pixel_buf_dim != texture_dim {
-            self.pixel_buffer = SharedPixelBuffer::new(w, h);
-            self.projection.update(
-                &self.cx,
-                &projection_matrix(input.size.width as f32, input.size.height as f32),
-            );
-        }
-
+        // Update uniforms
+        let projection = projection_matrix(input.size.width as f32, input.size.height as f32);
         let model_view = model_view(input.zoom, input.coords);
-        self.contour_model_view.update(&self.cx, &model_view);
 
-        let model_view = model_view * Affine3A::from_scale(Vec3::splat(0.9999));
-        self.land_model_view.update(&self.cx, &model_view);
+        let land_uniforms = Uniforms {
+            projection: projection.to_cols_array_2d(),
+            model_view: (model_view * Affine3A::from_scale(Vec3::splat(0.9999))).to_cols_array_2d(),
+            color: LAND_COLOR.to_array(),
+            _padding: [0.0; 12],
+        };
 
-        self.cx
-            .shed(|s| {
-                let background = Color::from_standard([0.0, 0.0, 0.0, 0.0]);
-                s.render(
-                    &self.texture,
-                    dunge::Options::from(background).clear_depth(1.0),
-                )
-                .layer(&self.layer)
-                .set(&self.land_set)
-                .draw(&self.land_mesh)
-                .layer(&self.contour_layer)
-                // TODO: contours is broken
-                .set(&self.contour_set)
-                .draw(&self.contour_mesh);
+        let contour_uniforms = Uniforms {
+            projection: projection.to_cols_array_2d(),
+            model_view: model_view.to_cols_array_2d(),
+            color: CONTOUR_COLOR.to_array(),
+            _padding: [0.0; 12],
+        };
 
-                s.copy(self.texture.color(), &self.buffer);
-            })
-            .await;
+        self.queue.write_buffer(
+            &self.land_uniform_buffer,
+            0,
+            bytemuck::bytes_of(&land_uniforms),
+        );
+        self.queue.write_buffer(
+            &self.contour_uniform_buffer,
+            0,
+            bytemuck::bytes_of(&contour_uniforms),
+        );
 
-        let len = (w * h * self.texture_format.bytes()) as usize;
-        match self.cx.read(&mut self.buffer).await {
-            Ok(texture_data) => {
-                // TODO: this will probably always clone the buffer,
-                // since the UI has a reference to it. Can we avoid this?
-                self.pixel_buffer.make_mut_bytes()[..len].copy_from_slice(&texture_data[..len]);
-            }
-            Err(e) => {
-                tracing::error!("Error: failed to copy texture: {e:?}");
-            }
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Map Render Encoder"),
+            });
+
+        let color_view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_view = self
+            .depth_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Map Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &color_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 0.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            // Draw land mesh
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_bind_group(0, &self.land_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.land_vertex_buffer.slice(..));
+            render_pass
+                .set_index_buffer(self.land_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.land_index_count, 0, 0..1);
+
+            // Draw contour mesh
+            render_pass.set_pipeline(&self.contour_pipeline);
+            render_pass.set_bind_group(0, &self.contour_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.contour_vertex_buffer.slice(..));
+            render_pass.draw(0..self.contour_vertex_count, 0..1);
         }
+
+        self.queue.submit(Some(encoder.finish()));
 
         let time = now.elapsed();
         tracing::trace!("map render took {time:?}");
 
-        Some(self.pixel_buffer.clone())
-    }
-
-    fn resize(&mut self, size: PhysicalSize) -> anyhow::Result<()> {
-        let w = NonZero::new(size.width).context("width was 0")?;
-        let h = NonZero::new(size.height).context("height was 0")?;
-        let texture = self.cx.make_texture(
-            TextureData::empty((w, h), self.texture_format)
-                .render()
-                .bind()
-                .copy_from()
-                .copy_to(),
-        );
-
-        let depth_texture = self.cx.make_texture(
-            TextureData::empty((w, h), Format::Depth)
-                .render()
-                .bind()
-                .copy_from()
-                .copy_to(),
-        );
-
-        self.texture = RenderBuffer::new(texture, depth_texture);
-        self.buffer = self.cx.make_buffer(
-            BufferData::empty(
-                self.texture.color().bytes_per_row_aligned()
-                    * u32::from(self.texture.size().height),
-            )
-            .read()
-            .copy_to(),
-        );
-        Ok(())
+        Some(self.texture.clone())
     }
 }
 
@@ -331,23 +443,14 @@ fn projection_matrix(width: f32, height: f32) -> Mat4 {
 fn model_view(zoom: f32, coords: Vec2) -> Mat4 {
     let mut view_matrix = Mat4::IDENTITY;
 
-    //const DISCONNECTED_ZOOM: f32 = 1.35;
-    // const CONNECTED_ZOOM: f32 = 1.25;
-
-    // Offset Y for placing the marker at the same area as the spinner. The zoom calculation is
-    // required for the unsecured and secured markers to be placed in the same spot.
-    // The constants look arbitrary. They are found by just trying stuff until it looks good.
-    // let offset_y = 0.088 + (zoom - CONNECTED_ZOOM) * 0.3;
+    // Offset Y for placing the marker at the same area as the spinner.
     let offset_y = 0.0;
 
-    // Move the camera back `this.zoom` away from the center of the globe.
-    // let view_matrix = view_matrix.append_translation(&Matrix3x1::new(0.0, offset_y, -args.zoom));
+    // Move the camera back `zoom` away from the center of the globe.
     view_matrix *= Affine3A::from_translation(Vec3::new(0.0, offset_y, -zoom));
 
     // Rotate the globe so the camera ends up looking down on `coords`.
     let (theta, phi) = coordinates_to_theta_phi(coords);
-    // let view_matrix = rotate_x(view_matrix, phi);
-    // let view_matrix = rotate_y(view_matrix, -theta);
     view_matrix *= Affine3A::from_rotation_x(phi);
     view_matrix *= Affine3A::from_rotation_y(-theta);
 

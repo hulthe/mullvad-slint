@@ -26,6 +26,8 @@ use mullvad_types::{
     relay_list::RelayList,
     states::TunnelState,
 };
+#[cfg(feature = "map")]
+use slint::wgpu_28::{WGPUConfiguration, WGPUSettings};
 use slint::{ComponentHandle as _, Model, ModelRc, ToSharedString, VecModel};
 use slint_ty::Country;
 
@@ -93,6 +95,16 @@ fn main() -> anyhow::Result<()> {
         .finish();
     tracing::subscriber::set_global_default(fmt_subscriber)
         .context("Failed to initialize tracing subscriber")?;
+
+    // Set up wgpu backend if map feature is enabled
+    #[cfg(feature = "map")]
+    {
+        let wgpu_settings = WGPUSettings::default();
+        slint::BackendSelector::new()
+            .require_wgpu_28(WGPUConfiguration::Automatic(wgpu_settings))
+            .select()
+            .expect("Unable to create Slint backend with WGPU based renderer");
+    }
 
     let rpc = Rpc::new();
 
@@ -411,29 +423,43 @@ fn main() -> anyhow::Result<()> {
     #[cfg(feature = "map")]
     {
         let app_weak = app.as_weak();
-        let mut map = None;
+        let mut map_renderer: Option<map::Map> = None;
+
         app.window()
-            .set_rendering_notifier(move |state, _graphics| {
-                // Draw the map before each render
-                let slint::RenderingState::BeforeRendering = state else {
-                    return;
-                };
+            .set_rendering_notifier(move |state, graphics_api| {
+                match state {
+                    slint::RenderingState::RenderingSetup => {
+                        // Initialize the map renderer when we have access to the wgpu device
+                        if let slint::GraphicsAPI::WGPU28 { device, queue, .. } = graphics_api {
+                            let app = app_weak.upgrade().unwrap();
+                            let size = app.window().size();
+                            map_renderer = Some(map::Map::new(device, queue, size));
+                        }
+                    }
+                    slint::RenderingState::BeforeRendering => {
+                        // Render the map before each frame
+                        if let (Some(map), Some(app)) = (map_renderer.as_mut(), app_weak.upgrade())
+                        {
+                            let size = app.window().size();
+                            let texture = map.render(map::MapInput {
+                                size,
+                                coords: glam::Vec2::new(app.get_latitude(), app.get_longitude()),
+                                zoom: app.get_zoom(),
+                            });
 
-                let app = app_weak.upgrade().unwrap();
-
-                let size = app.window().size();
-
-                let map = map.get_or_insert_with(|| dunge::block_on(map::Map::new(size)).unwrap());
-
-                let image = dunge::block_on(map.render(map::MapInput {
-                    size,
-                    coords: glam::Vec2::new(app.get_latitude(), app.get_longitude()),
-                    zoom: app.get_zoom(),
-                }))
-                .map(slint::Image::from_rgba8);
-
-                if let Some(image) = image {
-                    app.set_map(image);
+                            if let Some(texture) = texture {
+                                if let Ok(image) = slint::Image::try_from(texture) {
+                                    app.set_map(image);
+                                }
+                            }
+                            app.window().request_redraw();
+                        }
+                    }
+                    slint::RenderingState::RenderingTeardown => {
+                        // Clean up the map renderer
+                        drop(map_renderer.take());
+                    }
+                    _ => {}
                 }
             })
             .expect("Failed to set up rendering notifier");
