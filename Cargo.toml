@@ -9,63 +9,76 @@ identifier = "mullvadvpn-app.mullvad.net"
 short_description = "A minimal Mullvad VPN example, in Slint!"
 icon = ["./ui/images/icon.png"]
 
-[features]
-default = ["map", "tray-icon"]
-tray-icon = ["dep:tray-item"]
-map = ["dep:glam", "dep:dunge"]
-
 [dependencies]
 anyhow = "1.0.99"
-futures = "0.3.31"
-image = { version = "0.25.8", default-features = false, features = ["default-formats", "jpeg", "png", "tiff", "webp"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-tokio = { version = "1.47.1", default-features = false, features = ["macros", "rt", "rt-multi-thread", "sync"] }
-zerocopy = { version = "0.8.31", features = ["derive", "std"] }
-
+clap = { version = "4.5.54", features = ["derive", "env"] }
 # For rendering the 3d map
 dunge = { version = "0.3.11", optional = true }
-glam = { version = "0.30.9", features = ["zerocopy"], optional = true}
+futures = "0.3.31"
+glam = { version = "0.30.9", features = ["zerocopy"], optional = true }
+image = { version = "0.25.8", default-features = false, features = [
+  "default-formats",
+  "jpeg",
+  "png",
+  "tiff",
+  "webp"
+] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+tokio = { version = "1.47.1", default-features = false, features = [
+  "macros",
+  "rt",
+  "rt-multi-thread",
+  "sync"
+] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
-clap = { version = "4.5.54", features = ["derive", "env"] }
+zerocopy = { version = "0.8.31", features = ["derive", "std"] }
+
+[dependencies.mullvad-management-interface]
+git = "https://github.com/mullvad/mullvadvpn-app.git"
+rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741"  # 2025.14
+
+[dependencies.mullvad-types]
+git = "https://github.com/mullvad/mullvadvpn-app.git"
+rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741"  # 2025.14
+
+[dependencies.slint]
+version = "1.14.1"
+default-features = false
+features = [
+  "accessibility",
+  "backend-winit",
+  "compat-1-2",
+  "live-preview",
+  # "renderer-skia-opengl",
+  "renderer-femtovg",
+  "std",
+]
+
+[dependencies.talpid-types]
+git = "https://github.com/mullvad/mullvadvpn-app.git"
+rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741"  # 2025.14
+
+[build-dependencies]
+slint-build = "1.14.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Tray icon
-tray-item = { version = "0.10.0", features = ["ksni"], optional = true }
-
 # For launching apps from split tunneling view
 freedesktop-desktop-entry = "0.8.0"
 freedesktop-icons = "0.4.0"
-
+# Tray icon
+tray-item = { version = "0.10.0", features = ["ksni"], optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # HACK: we need to enable the "winerror" feature here because "parity-tokio-ipc" fails to compile
 # It should be enabled by management interface
 winapi = { version = "0.3", features = ["winerror"] }
 
-[dependencies.mullvad-management-interface]
-git = "https://github.com/mullvad/mullvadvpn-app.git"
-rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741" # 2025.14
-[dependencies.mullvad-types]
-git = "https://github.com/mullvad/mullvadvpn-app.git"
-rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741" # 2025.14
-[dependencies.talpid-types]
-git = "https://github.com/mullvad/mullvadvpn-app.git"
-rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741" # 2025.14
-
-[dependencies.slint]
-version = "1.14.1"
-default-features = false
-features = [
-	"std",
-	"compat-1-2",
-	"accessibility",
-	"backend-winit",
-	# "renderer-skia-opengl",
-	"renderer-femtovg",
-	"live-preview",
-]
+[features]
+default = ["map", "tray-icon"]
+map = ["dep:dunge", "dep:glam"]
+tray-icon = ["dep:tray-item"]
 
 [profile.dev]
 opt-level = 1
@@ -73,6 +86,3 @@ opt-level = 1
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
 opt-level = 2
-
-[build-dependencies]
-slint-build = "1.14.1"
