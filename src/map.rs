@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, slice};
 
 use glam::{Affine3A, Mat4, Vec2, Vec3, Vec4};
 use slint::wgpu_28::wgpu;
@@ -19,21 +19,39 @@ struct Uniforms {
     _padding: [f32; 12], // Padding to align to 256 bytes for dynamic offset
 }
 
+/// Uniform buffer layout for marker rendering
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct MarkerUniforms {
+    projection: [[f32; 4]; 4],
+    model_view: [[f32; 4]; 4],
+    marker_center: [f32; 3],
+    marker_radius: f32,
+    viewport_size: [f32; 2],
+    _padding: [f32; 2],
+    color: [f32; 4],
+}
+
 pub struct Map {
     last_input: Option<MapInput>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
     contour_pipeline: wgpu::RenderPipeline,
+    marker_pipeline: wgpu::RenderPipeline,
     land_vertex_buffer: wgpu::Buffer,
     land_index_buffer: wgpu::Buffer,
     land_index_count: u32,
     contour_vertex_buffer: wgpu::Buffer,
     contour_vertex_count: u32,
+    marker_index_buffer: wgpu::Buffer,
+    marker_index_count: u32,
     land_uniform_buffer: wgpu::Buffer,
     contour_uniform_buffer: wgpu::Buffer,
+    marker_uniform_buffer: wgpu::Buffer,
     land_bind_group: wgpu::BindGroup,
     contour_bind_group: wgpu::BindGroup,
+    marker_bind_group: wgpu::BindGroup,
     texture: wgpu::Texture,
     depth_texture: wgpu::Texture,
     texture_size: (u32, u32),
@@ -44,6 +62,7 @@ pub struct MapInput {
     pub size: slint::PhysicalSize,
     pub coords: Vec2,
     pub zoom: f32,
+    pub marker_coords: Option<Vec2>,
 }
 
 impl Map {
@@ -52,6 +71,13 @@ impl Map {
             label: Some("Map Shader"),
             source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
                 "map_shader.wgsl"
+            ))),
+        });
+
+        let marker_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Marker Shader"),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                "map_marker_shader.wgsl"
             ))),
         });
 
@@ -93,7 +119,7 @@ impl Map {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[vertex_buffer_layout.clone()],
+                buffers: slice::from_ref(&vertex_buffer_layout),
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -168,6 +194,47 @@ impl Map {
             cache: None,
         });
 
+        // Marker pipeline (billboard quads)
+        let marker_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Marker Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &marker_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &marker_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false, // Read-only depth testing
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
         // Load geometry data
         let land_points_bytes = include_bytes!("../geo/land_positions.gl");
         let land_points: &[[f32; 3]] = bytemuck::cast_slice(land_points_bytes.as_slice());
@@ -201,6 +268,16 @@ impl Map {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
+        // Create marker geometry (indexed drawing with procedural vertices)
+        // Vertex positions are generated in the shader using vertex_index
+        let marker_indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
+
+        let marker_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Marker Index Buffer"),
+            contents: bytemuck::cast_slice(&marker_indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
         // Create uniform buffers
         let land_uniforms = Uniforms {
             projection: Mat4::IDENTITY.to_cols_array_2d(),
@@ -228,6 +305,22 @@ impl Map {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+        let marker_uniforms = MarkerUniforms {
+            projection: Mat4::IDENTITY.to_cols_array_2d(),
+            model_view: Mat4::IDENTITY.to_cols_array_2d(),
+            marker_center: [0.0, 0.0, 0.0],
+            marker_radius: 14.0,
+            viewport_size: [size.width as f32, size.height as f32],
+            _padding: [0.0; 2],
+            color: [0.2, 0.8, 0.3, 1.0],
+        };
+
+        let marker_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Marker Uniform Buffer"),
+            contents: bytemuck::bytes_of(&marker_uniforms),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         // Create bind groups
         let land_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Land Bind Group"),
@@ -247,6 +340,15 @@ impl Map {
             }],
         });
 
+        let marker_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Marker Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: marker_uniform_buffer.as_entire_binding(),
+            }],
+        });
+
         let (texture, depth_texture) = Self::create_textures(device, size.width, size.height);
 
         Self {
@@ -255,15 +357,20 @@ impl Map {
             queue: queue.clone(),
             pipeline,
             contour_pipeline,
+            marker_pipeline,
             land_vertex_buffer,
             land_index_buffer,
             land_index_count: land_indices.len() as u32,
             contour_vertex_buffer,
             contour_vertex_count: contour_points.len() as u32,
+            marker_index_buffer,
+            marker_index_count: marker_indices.len() as u32,
             land_uniform_buffer,
             contour_uniform_buffer,
+            marker_uniform_buffer,
             land_bind_group,
             contour_bind_group,
+            marker_bind_group,
             texture,
             depth_texture,
             texture_size: (size.width, size.height),
@@ -360,6 +467,25 @@ impl Map {
             bytemuck::bytes_of(&contour_uniforms),
         );
 
+        // Update marker uniforms if marker is present
+        if let Some(marker_coords) = input.marker_coords {
+            let marker_center = coordinates_to_sphere_position(marker_coords);
+            let marker_uniforms = MarkerUniforms {
+                projection: projection.to_cols_array_2d(),
+                model_view: model_view.to_cols_array_2d(),
+                marker_center: marker_center.to_array(),
+                marker_radius: 14.0,
+                viewport_size: [input.size.width as f32, input.size.height as f32],
+                _padding: [0.0; 2],
+                color: [0.2, 0.8, 0.3, 1.0],
+            };
+            self.queue.write_buffer(
+                &self.marker_uniform_buffer,
+                0,
+                bytemuck::bytes_of(&marker_uniforms),
+            );
+        }
+
         // Create command encoder
         let mut encoder = self
             .device
@@ -417,6 +543,17 @@ impl Map {
             render_pass.set_bind_group(0, &self.contour_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.contour_vertex_buffer.slice(..));
             render_pass.draw(0..self.contour_vertex_count, 0..1);
+
+            // Draw marker if present
+            if input.marker_coords.is_some() {
+                render_pass.set_pipeline(&self.marker_pipeline);
+                render_pass.set_bind_group(0, &self.marker_bind_group, &[]);
+                render_pass.set_index_buffer(
+                    self.marker_index_buffer.slice(..),
+                    wgpu::IndexFormat::Uint32,
+                );
+                render_pass.draw_indexed(0..self.marker_index_count, 0, 0..1);
+            }
         }
 
         self.queue.submit(Some(encoder.finish()));
@@ -463,4 +600,21 @@ fn coordinates_to_theta_phi(coordinate: Vec2) -> (f32, f32) {
     let phi = latitude * (PI / 180.0);
     let theta = longitude * (PI / 180.0);
     (theta, phi)
+}
+
+/// Convert lat/long coordinates to 3D position on unit sphere
+fn coordinates_to_sphere_position(coordinate: Vec2) -> Vec3 {
+    let (latitude, longitude) = (coordinate.x, coordinate.y);
+    let phi = latitude * (PI / 180.0);
+    let theta = longitude * (PI / 180.0);
+
+    // Convert spherical coordinates to Cartesian (unit sphere)
+    // Using standard spherical coordinate system where:
+    // - theta (longitude) is rotation around Y axis
+    // - phi (latitude) is angle from equator
+    let x = phi.cos() * theta.sin();
+    let y = phi.sin();
+    let z = phi.cos() * theta.cos();
+
+    Vec3::new(x, y, z)
 }
