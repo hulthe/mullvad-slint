@@ -447,10 +447,10 @@ fn main() -> anyhow::Result<()> {
                                 zoom: app.get_zoom(),
                             });
 
-                            if let Some(texture) = texture {
-                                if let Ok(image) = slint::Image::try_from(texture) {
-                                    app.set_map(image);
-                                }
+                            if let Some(texture) = texture
+                                && let Ok(image) = slint::Image::try_from(texture)
+                            {
+                                app.set_map(image);
                             }
                             app.window().request_redraw();
                         }
