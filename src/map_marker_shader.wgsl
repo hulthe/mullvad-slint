@@ -83,8 +83,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let dist_pixels = dist_uv * 2.0 * uniforms.marker_radius;
     
     // Define sizes in pixels
-    let solid_radius = 7.0;        // Solid circle radius in pixels
-    let glow_radius = 20.0;        // Glow extends to this radius in pixels
+    let solid_radius = 9.0;        // Solid circle radius in pixels
+    let glow_radius = 30.0;        // Glow extends to this radius in pixels
     
     var alpha = 0.0;
     
@@ -94,8 +94,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     } else if (dist_pixels < glow_radius) {
         // Glow effect - exponential falloff
         let glow_factor = (glow_radius - dist_pixels) / (glow_radius - solid_radius);
-        alpha = pow(glow_factor, 2.0) * 0.5;
-        // return vec4<f32>(1.0, 0.0, 1.0, 1.0);
+        alpha = pow(glow_factor, 2.0) * 0.6;
     }
     
     return vec4<f32>(uniforms.color.rgb, uniforms.color.a * alpha);
