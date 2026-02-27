@@ -18,6 +18,7 @@ var<uniform> uniforms: MarkerUniforms;
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
+    @location(1) view_pos: vec3<f32>,
 }
 
 @vertex
@@ -68,12 +69,25 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     // Output position in clip space (reconstruct w component)
     output.position = vec4<f32>(final_ndc * clip_pos.w, ndc.z * clip_pos.w, clip_pos.w);
     output.uv = uv_coord;
+    output.view_pos = world_pos.xyz;
     
     return output;
 }
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    // Check if marker is on the far side of the sphere
+    // Transform the marker normal (model space) to view space
+    let marker_normal_view = normalize((uniforms.model_view * vec4<f32>(uniforms.marker_center, 0.0)).xyz);
+    
+    // Direction from camera (at origin in view space) to marker
+    let view_dir = normalize(input.view_pos);
+    
+    // If the normal points away from camera (same direction as view_dir), marker is on far side
+    if (dot(marker_normal_view, view_dir) > 0.0) {
+        discard;
+    }
+    
     // Calculate distance from center in pixel space
     let center = vec2<f32>(0.5, 0.5);
     let dist_uv = distance(input.uv, center);
