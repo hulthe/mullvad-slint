@@ -1,0 +1,98 @@
+// Screen-space marker shader for 3D globe
+// Renders a circular marker with glow effect at a 3D position
+// The marker maintains constant screen size regardless of perspective
+
+struct MarkerUniforms {
+    projection: mat4x4<f32>,
+    model_view: mat4x4<f32>,
+    marker_center: vec3<f32>,
+    marker_radius: f32,
+    viewport_size: vec2<f32>,
+    _padding: vec2<f32>,
+    color: vec4<f32>,
+}
+
+@group(0) @binding(0)
+var<uniform> uniforms: MarkerUniforms;
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var output: VertexOutput;
+    
+    // Transform marker center to clip space
+    let world_pos = uniforms.model_view * vec4<f32>(uniforms.marker_center, 1.0);
+    let clip_pos = uniforms.projection * world_pos;
+    
+    // Convert to normalized device coordinates (NDC)
+    let ndc = clip_pos.xyz / clip_pos.w;
+    
+    // Calculate screen-space offset for each vertex (quad corners)
+    // Vertex indices: 0=bottom-left, 1=bottom-right, 2=top-right, 3=top-left
+    var corner_offset = vec2<f32>(0.0, 0.0);
+    var uv_coord = vec2<f32>(0.0, 0.0);
+    
+    switch vertex_index {
+        case 0u: {
+            corner_offset = vec2<f32>(-1.0, -1.0);
+            uv_coord = vec2<f32>(0.0, 1.0);
+        }
+        case 1u: {
+            corner_offset = vec2<f32>(1.0, -1.0);
+            uv_coord = vec2<f32>(1.0, 1.0);
+        }
+        case 2u: {
+            corner_offset = vec2<f32>(1.0, 1.0);
+            uv_coord = vec2<f32>(1.0, 0.0);
+        }
+        default: { // case 3u
+            corner_offset = vec2<f32>(-1.0, 1.0);
+            uv_coord = vec2<f32>(0.0, 0.0);
+        }
+    }
+    
+    // Convert marker radius from pixels to NDC
+    let radius_ndc = vec2<f32>(
+        uniforms.marker_radius / uniforms.viewport_size.x * 2.0,
+        uniforms.marker_radius / uniforms.viewport_size.y * 2.0
+    );
+    
+    // Apply screen-space offset
+    let offset_ndc = corner_offset * radius_ndc;
+    let final_ndc = ndc.xy + offset_ndc;
+    
+    // Output position in clip space (reconstruct w component)
+    output.position = vec4<f32>(final_ndc * clip_pos.w, ndc.z * clip_pos.w, clip_pos.w);
+    output.uv = uv_coord;
+    
+    return output;
+}
+
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    // Calculate distance from center (UV center is at 0.5, 0.5)
+    let center = vec2<f32>(0.5, 0.5);
+    let dist = distance(input.uv, center);
+    
+    // Create circle with glow effect using distance field
+    // Inner circle: solid color (r < 0.3)
+    // Glow ring: gradient fade (0.3 <= r < 1.0)
+    // Outside: transparent (r >= 1.0)
+    
+    var alpha = 0.0;
+    
+    if (dist < 0.3) {
+        // Solid inner circle with smooth edge
+        alpha = smoothstep(0.35, 0.25, dist);
+    } else if (dist < 1.0) {
+        // Glow effect - exponential falloff
+        let glow_factor = (1.0 - dist) / 0.7;
+        alpha = pow(glow_factor, 2.0) * 0.6;
+    }
+    
+    return vec4<f32>(uniforms.color.rgb, uniforms.color.a * alpha);
+}

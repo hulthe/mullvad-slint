@@ -445,6 +445,12 @@ fn main() -> anyhow::Result<()> {
                                 size,
                                 coords: glam::Vec2::new(app.get_latitude(), app.get_longitude()),
                                 zoom: app.get_zoom(),
+                                // TODO: These are the same cords as used above, so they'll likely be
+                                // smoothly animated. I want them to only point to the destination.
+                                marker_coords: Some(glam::Vec2::new(
+                                    app.get_latitude(),
+                                    app.get_longitude(),
+                                )),
                             });
 
                             if let Some(texture) = texture
