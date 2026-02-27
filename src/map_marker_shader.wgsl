@@ -8,7 +8,8 @@ struct MarkerUniforms {
     marker_center: vec3<f32>,
     marker_radius: f32,
     viewport_size: vec2<f32>,
-    _padding: vec2<f32>,
+    time: f32,
+    _padding: f32,
     color: vec4<f32>,
 }
 
@@ -100,14 +101,22 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let solid_radius = 9.0;        // Solid circle radius in pixels
     let glow_radius = 30.0;        // Glow extends to this radius in pixels
     
+    // Pulsating animation when green (connected)
+    let is_green = uniforms.color.g > 0.7 && uniforms.color.r < 0.3;
+    var pulse_scale = 1.0;
+    if (is_green) {
+        // Gentle pulsing at 1 Hz
+        pulse_scale = 1.0 + sin(uniforms.time * 6.28318) * 0.15;
+    }
+    
     var alpha = 0.0;
     
     if (dist_pixels < solid_radius) {
-        // Solid inner circle with smooth edge
+        // Solid inner circle with smooth edge (no pulsing)
         alpha = smoothstep(solid_radius + 3.0, solid_radius - 3.0, dist_pixels);
-    } else if (dist_pixels < glow_radius) {
-        // Glow effect - exponential falloff
-        let glow_factor = (glow_radius - dist_pixels) / (glow_radius - solid_radius);
+    } else if (dist_pixels < glow_radius * pulse_scale) {
+        // Glow effect - exponential falloff (with pulsing)
+        let glow_factor = (glow_radius * pulse_scale - dist_pixels) / (glow_radius * pulse_scale - solid_radius);
         alpha = pow(glow_factor, 2.0) * 0.6;
     }
     

@@ -29,7 +29,8 @@ struct MarkerUniforms {
     marker_center: [f32; 3],
     marker_radius: f32,
     viewport_size: [f32; 2],
-    _padding: [f32; 2],
+    time: f32,
+    _padding: f32,
     color: [f32; 4],
 }
 
@@ -56,6 +57,7 @@ pub struct Map {
     texture: wgpu::Texture,
     depth_texture: wgpu::Texture,
     texture_size: (u32, u32),
+    start_time: std::time::Instant,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -313,7 +315,8 @@ impl Map {
             marker_center: [0.0, 0.0, 0.0],
             marker_radius: 40.0,
             viewport_size: [size.width as f32, size.height as f32],
-            _padding: [0.0; 2],
+            time: 0.0,
+            _padding: 0.0,
             color: [0.2, 0.8, 0.3, 1.0],
         };
 
@@ -376,6 +379,7 @@ impl Map {
             texture,
             depth_texture,
             texture_size: (size.width, size.height),
+            start_time: std::time::Instant::now(),
         }
     }
 
@@ -421,8 +425,11 @@ impl Map {
     }
 
     pub fn render(&mut self, input: MapInput) -> Option<wgpu::Texture> {
+        // Check if marker needs animation (green color = connected)
+        let marker_needs_animation = input.marker_color.y > 0.7 && input.marker_color.x < 0.3;
+
         // Check if we need to re-render
-        if self.last_input.as_ref() == Some(&input) {
+        if !marker_needs_animation && self.last_input.as_ref() == Some(&input) {
             return None;
         }
 
@@ -478,7 +485,8 @@ impl Map {
                 marker_center: marker_center.to_array(),
                 marker_radius: 40.0,
                 viewport_size: [input.size.width as f32, input.size.height as f32],
-                _padding: [0.0; 2],
+                time: self.start_time.elapsed().as_secs_f32(),
+                _padding: 0.0,
                 color: input.marker_color.to_array(),
             };
             self.queue.write_buffer(
