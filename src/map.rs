@@ -63,6 +63,7 @@ pub struct MapInput {
     pub coords: Vec2,
     pub zoom: f32,
     pub marker_coords: Option<Vec2>,
+    pub marker_color: Vec4,
 }
 
 impl Map {
@@ -477,7 +478,7 @@ impl Map {
                 marker_radius: 40.0,
                 viewport_size: [input.size.width as f32, input.size.height as f32],
                 _padding: [0.0; 2],
-                color: [0.2, 0.8, 0.3, 1.0],
+                color: input.marker_color.to_array(),
             };
             self.queue.write_buffer(
                 &self.marker_uniform_buffer,
