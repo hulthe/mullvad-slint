@@ -14,7 +14,10 @@ mod tray;
 
 mod slint_ty;
 
-use std::{rc::Rc, sync::LazyLock};
+use std::{
+    rc::Rc,
+    sync::{Arc, LazyLock, Mutex},
+};
 
 use anyhow::{Context, bail};
 use clap::Parser;
@@ -22,6 +25,7 @@ use futures::StreamExt as _;
 use mullvad_management_interface::client::DaemonEvent;
 use mullvad_types::{
     constraints::Constraint,
+    location::GeoIpLocation,
     relay_constraints::{GeographicLocationConstraint, LocationConstraint, RelaySettings},
     relay_list::RelayList,
     states::TunnelState,
@@ -261,6 +265,7 @@ fn main() -> anyhow::Result<()> {
     async fn listen_for_events(
         mut rpc: mullvad_management_interface::MullvadProxyClient,
         app_weak: slint::Weak<slint_ty::AppWindow>,
+        marker_state: Arc<Mutex<Option<(glam::Vec2, glam::Vec4)>>>,
     ) -> anyhow::Result<()> {
         let mut events = rpc
             .events_listen()
@@ -287,6 +292,8 @@ fn main() -> anyhow::Result<()> {
 
             let country = location.map(|l| l.country.as_str()).unwrap_or_default();
             let city = location.and_then(|l| l.city.as_deref());
+
+            update_marker_state(marker_state.clone(), tunnel_state);
 
             let latlong = location
                 .map(|l| (l.latitude as f32, l.longitude as f32))
@@ -404,9 +411,13 @@ fn main() -> anyhow::Result<()> {
         Ok(())
     }
 
+    let marker_state = Arc::new(Mutex::new(None));
+
     let app_weak = app.as_weak();
+    let marker_state_clone = marker_state.clone();
     rpc.spawn_with_rpc_retry_on_error(async move |rpc| {
-        listen_for_events(rpc, app_weak.clone())
+        let marker_state = marker_state_clone.clone();
+        listen_for_events(rpc, app_weak.clone(), marker_state)
             .await
             .inspect_err(|_| {
                 let _ = app_weak.upgrade_in_event_loop(|app| {
@@ -424,6 +435,7 @@ fn main() -> anyhow::Result<()> {
     {
         let app_weak = app.as_weak();
         let mut map_renderer: Option<map::Map> = None;
+        let marker_state = marker_state.clone();
 
         app.window()
             .set_rendering_notifier(move |state, graphics_api| {
@@ -441,16 +453,17 @@ fn main() -> anyhow::Result<()> {
                         if let (Some(map), Some(app)) = (map_renderer.as_mut(), app_weak.upgrade())
                         {
                             let size = app.window().size();
+                            let (marker_coords, marker_color) = marker_state
+                                .lock()
+                                .unwrap()
+                                .map(|(coords, color)| (Some(coords), color))
+                                .unwrap_or((None, glam::Vec4::new(0.8, 0.2, 0.2, 1.0)));
                             let texture = map.render(map::MapInput {
                                 size,
                                 coords: glam::Vec2::new(app.get_latitude(), app.get_longitude()),
                                 zoom: app.get_zoom(),
-                                // TODO: These are the same cords as used above, so they'll likely be
-                                // smoothly animated. I want them to only point to the destination.
-                                marker_coords: Some(glam::Vec2::new(
-                                    app.get_latitude(),
-                                    app.get_longitude(),
-                                )),
+                                marker_coords,
+                                marker_color,
                             });
 
                             if let Some(texture) = texture
@@ -474,4 +487,43 @@ fn main() -> anyhow::Result<()> {
     app.run()?;
 
     Ok(())
+}
+
+fn update_marker_state(
+    marker_state: Arc<Mutex<Option<(glam::Vec2, glam::Vec4)>>>,
+    tunnel_state: &TunnelState,
+) {
+    // Determine marker color based on tunnel state
+    let marker = match tunnel_state {
+        TunnelState::Disconnected { location, .. } => {
+            Some((glam::Vec4::new(0.8, 0.2, 0.2, 1.0), location))
+        } // Red
+        TunnelState::Connecting { location, .. } => {
+            Some((glam::Vec4::new(0.9, 0.7, 0.2, 1.0), location))
+        } // Yellow
+        TunnelState::Connected { location, .. } => {
+            Some((glam::Vec4::new(0.2, 0.8, 0.3, 1.0), location))
+        } // Green
+        _ => None, // Yellow
+    };
+
+    if let Some((marker_color, location_opt)) = marker {
+        let mut state = marker_state.lock().unwrap();
+
+        if let Some(GeoIpLocation {
+            latitude,
+            longitude,
+            ..
+        }) = location_opt
+        {
+            // Update both position and color
+            *state = Some((
+                glam::Vec2::new(*latitude as f32, *longitude as f32),
+                marker_color,
+            ));
+        } else if let Some((prev_coords, _)) = *state {
+            // No new location, but preserve previous coordinates and update color
+            *state = Some((prev_coords, marker_color));
+        }
+    }
 }
