@@ -74,24 +74,28 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Calculate distance from center (UV center is at 0.5, 0.5)
+    // Calculate distance from center in pixel space
     let center = vec2<f32>(0.5, 0.5);
-    let dist = distance(input.uv, center);
+    let dist_uv = distance(input.uv, center);
     
-    // Create circle with glow effect using distance field
-    // Inner circle: solid color (r < 0.3)
-    // Glow ring: gradient fade (0.3 <= r < 1.0)
-    // Outside: transparent (r >= 1.0)
+    // Convert UV distance to pixel distance
+    // In UV space, distance 1.0 = marker_radius pixels (from center to edge)
+    let dist_pixels = dist_uv * 2.0 * uniforms.marker_radius;
+    
+    // Define sizes in pixels
+    let solid_radius = 7.0;        // Solid circle radius in pixels
+    let glow_radius = 20.0;        // Glow extends to this radius in pixels
     
     var alpha = 0.0;
     
-    if (dist < 0.3) {
+    if (dist_pixels < solid_radius) {
         // Solid inner circle with smooth edge
-        alpha = smoothstep(0.35, 0.25, dist);
-    } else if (dist < 1.0) {
+        alpha = smoothstep(solid_radius + 3.0, solid_radius - 3.0, dist_pixels);
+    } else if (dist_pixels < glow_radius) {
         // Glow effect - exponential falloff
-        let glow_factor = (1.0 - dist) / 0.7;
-        alpha = pow(glow_factor, 2.0) * 0.6;
+        let glow_factor = (glow_radius - dist_pixels) / (glow_radius - solid_radius);
+        alpha = pow(glow_factor, 2.0) * 0.5;
+        // return vec4<f32>(1.0, 0.0, 1.0, 1.0);
     }
     
     return vec4<f32>(uniforms.color.rgb, uniforms.color.a * alpha);
