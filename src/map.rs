@@ -17,6 +17,7 @@ use dunge::{
     usage::Texture,
 };
 use glam::{Affine3A, Mat4, Vec2, Vec3, Vec4};
+use include_bytes_aligned::include_bytes_aligned;
 use slint::{PhysicalSize, Rgba8Pixel, SharedPixelBuffer};
 use zerocopy::FromBytes;
 
@@ -139,13 +140,13 @@ impl Map {
         let land_set = cx.make_set(&shader, (&land_color, &land_model_view, &projection));
         let contour_set = cx.make_set(&shader, (&contour_color, &contour_model_view, &projection));
 
-        let land_points = include_bytes!("../geo/land_positions.gl");
+        let land_points = include_bytes_aligned!(4, "../geo/land_positions.gl");
         let land_points = <[Vec3]>::ref_from_bytes(land_points.as_slice()).unwrap();
 
-        let land_indices = include_bytes!("../geo/land_triangle_indices.gl");
+        let land_indices = include_bytes_aligned!(4, "../geo/land_triangle_indices.gl");
         let land_indices = <[[u32; 3]]>::ref_from_bytes(land_indices).unwrap();
 
-        let contour_indices = include_bytes!("../geo/land_contour_indices.gl");
+        let contour_indices = include_bytes_aligned!(4, "../geo/land_contour_indices.gl");
         let contour_indices = <[u32]>::ref_from_bytes(contour_indices).unwrap();
         let contour_points = contour_indices
             .iter()
