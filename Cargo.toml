@@ -38,11 +38,11 @@ zerocopy = { version = "0.8.31", features = ["derive", "std"] }
 
 [dependencies.mullvad-management-interface]
 git = "https://github.com/mullvad/mullvadvpn-app.git"
-rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741"  # 2025.14
+rev = "b32eb1aa15ba52b24af722c987b21e15e20a9816"  # 2026.1-beta1
 
 [dependencies.mullvad-types]
 git = "https://github.com/mullvad/mullvadvpn-app.git"
-rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741"  # 2025.14
+rev = "b32eb1aa15ba52b24af722c987b21e15e20a9816"  # 2026.1-beta1
 
 [dependencies.slint]
 version = "1.15.0"
@@ -59,7 +59,7 @@ features = [
 
 [dependencies.talpid-types]
 git = "https://github.com/mullvad/mullvadvpn-app.git"
-rev = "04443f9622153e3ff286c7a50b9ca7a0e1c60741"  # 2025.14
+rev = "b32eb1aa15ba52b24af722c987b21e15e20a9816"  # 2026.1-beta1
 
 [build-dependencies]
 slint-build = "1.14.1"
