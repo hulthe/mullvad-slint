@@ -53,9 +53,10 @@ features = [
   "accessibility",
   "backend-winit",
   "compat-1-2",
+  "live-preview",
   "renderer-femtovg",
-  "unstable-wgpu-28",
   "std",
+  "unstable-wgpu-28",
 ]
 
 [dependencies.talpid-types]
